@@ -96,7 +96,7 @@ jobs:
               \"properties\": {
                 \"hostPoolName\": \"${HP}\",
                 \"registrationInfoToken\": \"${TOKEN}\",
-                \"aadJoin\": false
+                \"aadJoin\": true
               }
             }" \
             --verbose

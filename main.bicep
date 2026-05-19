@@ -444,6 +444,22 @@ resource vmAvd 'Microsoft.Compute/virtualMachines@2023-09-01' = {
     networkProfile: { networkInterfaces: [ { id: nicAvd.id } ] }
     licenseType: 'Windows_Client'
   }
+  identity: {
+    type: 'SystemAssigned'
+  }
+}
+
+// ============ Entra ID Join Extension ============
+resource aadLogin 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
+  parent: vmAvd
+  name: 'AADLoginForWindows'
+  location: location
+  properties: {
+    publisher: 'Microsoft.Azure.ActiveDirectory'
+    type: 'AADLoginForWindows'
+    typeHandlerVersion: '2.0'
+    autoUpgradeMinorVersion: true
+  }
 }
 
 // ============ Outputs ============
