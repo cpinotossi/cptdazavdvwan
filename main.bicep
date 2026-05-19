@@ -352,6 +352,70 @@ resource vmAvd 'Microsoft.Compute/virtualMachines@2023-09-01' = {
 //   $token = (Get-AzWvdHostPoolRegistrationToken -HostPoolName hp-cptdazavdvwan -ResourceGroupName rg-cptdazavdvwan).Token
 // For the UDR routing test, VM registration with AVD is not required.
 
+// ============ AVD Registration: Deployment Script + DSC ============
+// The host pool token is not available as a resource property in the same
+// deployment. A deployment script retrieves it after host pool creation.
+resource uami 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-avd-deploy-${prefix}'
+  location: location
+}
+
+// Desktop Virtualization Contributor on the RG so the script can read the token
+resource roleAssignAvd 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, uami.id, 'desktopvirt-contributor')
+  properties: {
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '082f0a83-3be5-4ba1-904c-961cca79b387')
+  }
+}
+
+resource dsGetToken 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
+  name: 'ds-avd-token-${prefix}'
+  location: location
+  kind: 'AzurePowerShell'
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${uami.id}': {} } }
+  properties: {
+    azPowerShellVersion: '12.0'
+    retentionInterval: 'PT1H'
+    timeout: 'PT10M'
+    scriptContent: '''
+      $token = (Get-AzWvdHostPoolRegistrationToken -ResourceGroupName $env:RG_NAME -HostPoolName $env:HP_NAME).Token
+      if (-not $token) {
+        $token = (New-AzWvdRegistrationInfo -ResourceGroupName $env:RG_NAME -HostPoolName $env:HP_NAME -ExpirationTime ((Get-Date).AddHours(24))).Token
+      }
+      $DeploymentScriptOutputs = @{ token = $token }
+    '''
+    environmentVariables: [
+      { name: 'RG_NAME', value: resourceGroup().name }
+      { name: 'HP_NAME', value: hostPool.name }
+    ]
+  }
+  dependsOn: [ roleAssignAvd ]
+}
+
+resource extAvdDsc 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
+  parent: vmAvd
+  name: 'Microsoft.PowerShell.DSC'
+  location: location
+  properties: {
+    publisher: 'Microsoft.Powershell'
+    type: 'DSC'
+    typeHandlerVersion: '2.73'
+    autoUpgradeMinorVersion: true
+    settings: {
+      modulesUrl: 'https://wvdportalstorageblob.blob.${environment().suffixes.storage}/galleryartifacts/Configuration_1.0.02797.442.zip'
+      configurationFunction: 'Configuration.ps1\\AddSessionHost'
+      properties: {
+        hostPoolName: hostPool.name
+        registrationInfoRegistrationToken: dsGetToken.properties.outputs.token
+        aadJoin: false
+      }
+    }
+  }
+  dependsOn: [ cxAvd ]
+}
+
 // ============ Outputs ============
 output firewallPrivateIp string = fw.properties.hubIPAddresses.privateIPAddress
 output bastionName string = bastion.name
