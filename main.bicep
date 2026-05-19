@@ -57,6 +57,9 @@ resource fwPolicy 'Microsoft.Network/firewallPolicies@2023-09-01' = {
   properties: {
     sku: { tier: 'Standard' }
     threatIntelMode: 'Alert'
+    dnsSettings: {
+      enableProxy: true
+    }
   }
 }
 
