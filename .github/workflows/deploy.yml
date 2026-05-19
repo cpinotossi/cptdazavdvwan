@@ -63,6 +63,44 @@ jobs:
             --query "[?properties.provisioningState=='Failed'].{resource:properties.targetResource.resourceName, error:properties.statusMessage.error}" \
             --output json
 
+      - name: Register AVD Session Host
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          HP="hp-${{ env.PREFIX }}"
+          VM="vm-avd-${{ env.PREFIX }}"
+
+          echo "=== Retrieving AVD registration token ==="
+          TOKEN=$(az desktopvirtualization hostpool retrieve-registration-token \
+            --resource-group "$RG" \
+            --name "$HP" \
+            --query token -o tsv)
+
+          if [ -z "$TOKEN" ]; then
+            echo "Token empty, generating new one..."
+            TOKEN=$(az rest --method POST \
+              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RG}/providers/Microsoft.DesktopVirtualization/hostPools/${HP}/registrationTokens?api-version=2023-09-05" \
+              --body '{"expirationTime":"'"$(date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%S.0000000Z)"'"}' \
+              --query token -o tsv)
+          fi
+
+          echo "=== Installing DSC extension for AVD agent ==="
+          az vm extension set \
+            --resource-group "$RG" \
+            --vm-name "$VM" \
+            --name "Microsoft.PowerShell.DSC" \
+            --publisher "Microsoft.Powershell" \
+            --version "2.73" \
+            --settings "{
+              \"modulesUrl\": \"https://wvdportalstorageblob.blob.core.windows.net/galleryartifacts/Configuration_1.0.02797.442.zip\",
+              \"configurationFunction\": \"Configuration.ps1\\\\AddSessionHost\",
+              \"properties\": {
+                \"hostPoolName\": \"${HP}\",
+                \"registrationInfoRegistrationToken\": \"${TOKEN}\",
+                \"aadJoin\": false
+              }
+            }" \
+            --verbose
+
       - name: Show effective routes on AVD NIC
         run: |
           az network nic show-effective-route-table \
