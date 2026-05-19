@@ -174,7 +174,28 @@ resource routingIntent 'Microsoft.Network/virtualHubs/routingIntent@2023-09-01' 
   }
 }
 
+// ============ NAT Gateway for AVD RDP bypass ============
+resource natgwPip 'Microsoft.Network/publicIPAddresses@2023-09-01' = {
+  name: 'pip-natgw-avd-${prefix}'
+  location: location
+  sku: { name: 'Standard' }
+  properties: { publicIPAllocationMethod: 'Static' }
+}
+
+resource natgw 'Microsoft.Network/natGateways@2023-09-01' = {
+  name: 'natgw-avd-${prefix}'
+  location: location
+  sku: { name: 'Standard' }
+  properties: {
+    idleTimeoutInMinutes: 4
+    publicIpAddresses: [ { id: natgwPip.id } ]
+  }
+}
+
 // ============ AVD Spoke VNet + UDR (THE TEST) ============
+// Test: Can a UDR with Service Tag 'WindowsVirtualDesktop' + next-hop Internet
+// coexist with vWAN Routing Intent (0/0 -> FW)?
+// Expected: WVD traffic exits via NAT GW, everything else via FW.
 resource rtAvd 'Microsoft.Network/routeTables@2023-09-01' = {
   name: 'rt-avd-${prefix}'
   location: location
@@ -182,9 +203,16 @@ resource rtAvd 'Microsoft.Network/routeTables@2023-09-01' = {
     disableBgpRoutePropagation: false
     routes: [
       {
-        // Test: more-specific route that should coexist with Routing Intent.
-        // Routing Intent injects 10.0.0.0/8 -> FW. This UDR tests if
-        // 10.99.0.0/16 -> None wins (more specific).
+        // THE KEY TEST: Service Tag route for AVD/WVD traffic -> Internet (NAT GW).
+        // If Routing Intent allows this, RDP/WVD traffic bypasses the firewall.
+        name: 'avd-wvd-direct-internet'
+        properties: {
+          addressPrefix: 'WindowsVirtualDesktop'
+          nextHopType: 'Internet'
+        }
+      }
+      {
+        // Secondary test: more-specific private route vs Routing Intent 10.0.0.0/8.
         name: 'test-udr-more-specific'
         properties: {
           addressPrefix: '10.99.0.0/16'
@@ -229,6 +257,7 @@ resource vnetAvd 'Microsoft.Network/virtualNetworks@2023-09-01' = {
           addressPrefix: avdHostSubnet
           routeTable: { id: rtAvd.id }
           networkSecurityGroup: { id: nsgAvd.id }
+          natGateway: { id: natgw.id }
         }
       }
       { name: 'AzureBastionSubnet', properties: { addressPrefix: avdBastionSubnet } }
@@ -348,6 +377,8 @@ resource vmAvd 'Microsoft.Compute/virtualMachines@2023-09-01' = {
 
 // ============ Outputs ============
 output firewallPrivateIp string = fw.properties.hubIPAddresses.privateIPAddress
+output firewallPublicIp string = fw.properties.hubIPAddresses.publicIPs.addresses[0].address
+output natGatewayPublicIp string = natgwPip.properties.ipAddress
 output bastionName string = bastion.name
 output hostPoolName string = hostPool.name
 output avdVmName string = vmAvd.name

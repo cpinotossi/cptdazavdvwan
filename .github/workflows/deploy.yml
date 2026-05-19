@@ -103,7 +103,45 @@ jobs:
 
       - name: Show effective routes on AVD NIC
         run: |
+          echo "=== Effective Routes on AVD NIC ==="
+          echo "Look for:"
+          echo "  - 0.0.0.0/0 -> VirtualHub (Routing Intent)"
+          echo "  - WindowsVirtualDesktop IPs -> Internet (UDR + NAT GW)"
+          echo "  - 10.99.0.0/16 -> None (UDR test)"
+          echo ""
           az network nic show-effective-route-table \
             --resource-group "rg-${{ env.PREFIX }}" \
             --name "nic-avd-${{ env.PREFIX }}" \
             --output table
+
+      - name: Show public IPs for comparison
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          echo "=== Public IPs ==="
+          echo "Firewall PIP (default internet egress):"
+          az deployment group show -g "$RG" -n main --query properties.outputs.firewallPublicIp.value -o tsv
+          echo ""
+          echo "NAT Gateway PIP (expected for WVD/RDP traffic):"
+          az deployment group show -g "$RG" -n main --query properties.outputs.natGatewayPublicIp.value -o tsv
+          echo ""
+          echo "=== Test from VM: curl ifconfig.me ==="
+          echo "If Routing Intent wins for default traffic, this shows Firewall PIP."
+          echo "Run via Bastion/Serial Console: curl -s ifconfig.me"
+
+      - name: Validate routing via Run Command
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          VM="vm-avd-${{ env.PREFIX }}"
+          echo "=== Running outbound IP check on AVD VM ==="
+          az vm run-command invoke \
+            --resource-group "$RG" \
+            --name "$VM" \
+            --command-id RunPowerShellScript \
+            --scripts "
+              Write-Output '--- Outbound IP (general internet) ---'
+              try { (Invoke-WebRequest -Uri http://ifconfig.me/ip -UseBasicParsing -TimeoutSec 10).Content } catch { Write-Output \"BLOCKED or timeout: \$_\" }
+              Write-Output ''
+              Write-Output '--- Effective routes (Get-NetRoute) ---'
+              Get-NetRoute -AddressFamily IPv4 | Where-Object { \$_.DestinationPrefix -ne '255.255.255.255/32' -and \$_.DestinationPrefix -ne '224.0.0.0/4' } | Format-Table -AutoSize
+            " \
+            --output json | jq -r '.value[].message'
