@@ -346,28 +346,11 @@ resource vmAvd 'Microsoft.Compute/virtualMachines@2023-09-01' = {
   }
 }
 
-// DSC extension to register as AVD session host
-resource extAvdDsc 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
-  parent: vmAvd
-  name: 'Microsoft.PowerShell.DSC'
-  location: location
-  properties: {
-    publisher: 'Microsoft.Powershell'
-    type: 'DSC'
-    typeHandlerVersion: '2.73'
-    autoUpgradeMinorVersion: true
-    settings: {
-      modulesUrl: 'https://wvdportalstorageblob.blob.${environment().suffixes.storage}/galleryartifacts/Configuration_1.0.02797.442.zip'
-      configurationFunction: 'Configuration.ps1\\AddSessionHost'
-      properties: {
-        hostPoolName: hostPool.name
-        registrationInfoRegistrationToken: hostPool.properties.registrationInfo.token
-        aadJoin: false
-      }
-    }
-  }
-  dependsOn: [ cxAvd ]
-}
+// NOTE: DSC extension for AVD session host registration removed.
+// The registration token is not evaluable in a single deployment.
+// Register the session host manually after deployment if needed:
+//   $token = (Get-AzWvdHostPoolRegistrationToken -HostPoolName hp-cptdazavdvwan -ResourceGroupName rg-cptdazavdvwan).Token
+// For the UDR routing test, VM registration with AVD is not required.
 
 // ============ Outputs ============
 output firewallPrivateIp string = fw.properties.hubIPAddresses.privateIPAddress

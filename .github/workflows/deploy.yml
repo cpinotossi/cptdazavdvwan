@@ -42,7 +42,26 @@ jobs:
           az deployment group create \
             --resource-group "rg-${{ env.PREFIX }}" \
             --template-file main.bicep \
-            --parameters main.bicepparam
+            --parameters main.bicepparam \
+            --verbose
+
+      - name: Show deployment operations on failure
+        if: failure()
+        run: |
+          echo "=== Deployment Operations ==="
+          az deployment group list \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --output table
+          echo ""
+          echo "=== Failed Operations ==="
+          DEPLOY_NAME=$(az deployment group list \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --query "[0].name" -o tsv)
+          az deployment operation group list \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --name "$DEPLOY_NAME" \
+            --query "[?properties.provisioningState=='Failed'].{resource:properties.targetResource.resourceName, error:properties.statusMessage.error}" \
+            --output json
 
       - name: Show effective routes on AVD NIC
         run: |
