@@ -71,43 +71,98 @@ resource fwRcg 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2023-09-
     ruleCollections: [
       {
         ruleCollectionType: 'FirewallPolicyFilterRuleCollection'
-        name: 'allow-avd-egress'
+        name: 'allow-avd-egress-https'
         priority: 1000
         action: { type: 'Allow' }
         rules: [
           {
             ruleType: 'ApplicationRule'
-            name: 'avd-service-traffic'
+            name: 'avd-service-traffic-https'
             sourceAddresses: [ avdSpokeAddr ]
             protocols: [ { protocolType: 'Https', port: 443 } ]
             targetFqdns: [
+              // AVD Service Traffic (required)
               '*.wvd.microsoft.com'
               #disable-next-line no-hardcoded-env-urls
-              '*.login.microsoftonline.com'
+              '*.service.windows.cloud.microsoft'
+              #disable-next-line no-hardcoded-env-urls
+              '*.windows.cloud.microsoft'
+              #disable-next-line no-hardcoded-env-urls
+              '*.windows.static.microsoft'
+              // Authentication
               #disable-next-line no-hardcoded-env-urls
               'login.microsoftonline.com'
+              #disable-next-line no-hardcoded-env-urls
+              '*.login.microsoftonline.com'
               '*.microsoftonline.com'
+              #disable-next-line no-hardcoded-env-urls
+              'login.windows.net'
+              // Azure management + general Microsoft
               '*.microsoft.com'
               '*.azure.com'
               #disable-next-line no-hardcoded-env-urls
               'management.azure.com'
+              'aka.ms'
+              // Monitoring
               #disable-next-line no-hardcoded-env-urls
               'gcs.prod.monitoring.core.windows.net'
               #disable-next-line no-hardcoded-env-urls
               '*.prod.warm.ingest.monitor.core.windows.net'
+              // Azure Marketplace + updates
               'catalogartifact.azureedge.net'
               '*.delivery.mp.microsoft.com'
               '*.windowsupdate.com'
-              '*.digicert.com'
-              '*.azure-dns.com'
-              '*.azure-dns.net'
-              // AVD agent download + blob storage + general windows.net services
+              #disable-next-line no-hardcoded-env-urls
+              '*.prod.do.dsp.mp.microsoft.com'
+              // Storage / Blob (AVD agent download, SXS stack updates)
               #disable-next-line no-hardcoded-env-urls
               '*.blob.core.windows.net'
               #disable-next-line no-hardcoded-env-urls
               '*.servicebus.windows.net'
               #disable-next-line no-hardcoded-env-urls
               '*.core.windows.net'
+              // DNS, certificates, telemetry
+              '*.azure-dns.com'
+              '*.azure-dns.net'
+              '*.digicert.com'
+              #disable-next-line no-hardcoded-env-urls
+              '*.events.data.microsoft.com'
+              // OneDrive, Graph
+              '*.sfx.ms'
+              #disable-next-line no-hardcoded-env-urls
+              'graph.microsoft.com'
+            ]
+          }
+        ]
+      }
+      {
+        ruleCollectionType: 'FirewallPolicyFilterRuleCollection'
+        name: 'allow-avd-egress-http'
+        priority: 1010
+        action: { type: 'Allow' }
+        rules: [
+          {
+            // Port 80 required for certificates + connectivity checks
+            ruleType: 'ApplicationRule'
+            name: 'avd-certificates-http'
+            sourceAddresses: [ avdSpokeAddr ]
+            protocols: [ { protocolType: 'Http', port: 80 } ]
+            targetFqdns: [
+              #disable-next-line no-hardcoded-env-urls
+              'oneocsp.microsoft.com'
+              'www.microsoft.com'
+              '*.digicert.com'
+              #disable-next-line no-hardcoded-env-urls
+              '*.aikcertaia.microsoft.com'
+              #disable-next-line no-hardcoded-env-urls
+              'azcsprodeusaikpublish.blob.core.windows.net'
+              #disable-next-line no-hardcoded-env-urls
+              '*.microsoftaik.azure.net'
+              #disable-next-line no-hardcoded-env-urls
+              'ctldl.windowsupdate.com'
+              #disable-next-line no-hardcoded-env-urls
+              'www.msftconnecttest.com'
+              'ocsp.msocsp.com'
             ]
           }
         ]
@@ -125,6 +180,15 @@ resource fwRcg 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2023-09-
             sourceAddresses: [ avdSpokeAddr ]
             destinationAddresses: [ '23.102.135.246', '20.118.99.224', '40.83.235.53' ]
             destinationPorts: [ '1688' ]
+          }
+          {
+            // RDP Shortpath relay - required for relayed RDP connectivity
+            ruleType: 'NetworkRule'
+            name: 'rdp-shortpath-relay'
+            ipProtocols: [ 'UDP' ]
+            sourceAddresses: [ avdSpokeAddr ]
+            destinationAddresses: [ '51.5.0.0/16' ]
+            destinationPorts: [ '3478' ]
           }
           {
             ruleType: 'NetworkRule'
@@ -148,7 +212,7 @@ resource fwRcg 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2023-09-
             ipProtocols: [ 'TCP' ]
             sourceAddresses: [ avdSpokeAddr ]
             destinationAddresses: [ '169.254.169.254', '168.63.129.16' ]
-            destinationPorts: [ '80' ]
+            destinationPorts: [ '80', '32526' ]
           }
         ]
       }
