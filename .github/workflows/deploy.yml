@@ -87,7 +87,7 @@ jobs:
           az vm extension set \
             --resource-group "$RG" \
             --vm-name "$VM" \
-            --name "Microsoft.PowerShell.DSC" \
+            --name "DSC" \
             --publisher "Microsoft.Powershell" \
             --version "2.73" \
             --settings "{
