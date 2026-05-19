@@ -51,6 +51,8 @@ resource vhub 'Microsoft.Network/virtualHubs@2023-09-01' = {
 }
 
 // ============ Azure Firewall Policy ============
+// Required FQDNs: https://learn.microsoft.com/en-us/azure/virtual-desktop/required-fqdn-endpoint?tabs=azure
+// Firewall with AVD: https://learn.microsoft.com/en-us/azure/firewall/protect-azure-virtual-desktop
 resource fwPolicy 'Microsoft.Network/firewallPolicies@2023-09-01' = {
   name: 'afwp-${prefix}'
   location: location
