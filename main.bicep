@@ -4,8 +4,11 @@
 
 targetScope = 'resourceGroup'
 
-@description('Azure region.')
+@description('Azure region for networking and VMs.')
 param location string = resourceGroup().location
+
+@description('Azure region for AVD control plane (not all regions support AVD).')
+param avdLocation string = 'northeurope'
 
 @description('Naming prefix.')
 param prefix string = 'cptdazavdvwan'
@@ -269,7 +272,7 @@ resource bastion 'Microsoft.Network/bastionHosts@2023-09-01' = {
 // ============ AVD Host Pool ============
 resource hostPool 'Microsoft.DesktopVirtualization/hostPools@2023-09-05' = {
   name: 'hp-${prefix}'
-  location: location
+  location: avdLocation
   properties: {
     hostPoolType: 'Pooled'
     loadBalancerType: 'BreadthFirst'
@@ -285,7 +288,7 @@ resource hostPool 'Microsoft.DesktopVirtualization/hostPools@2023-09-05' = {
 
 resource appGroup 'Microsoft.DesktopVirtualization/applicationGroups@2023-09-05' = {
   name: 'dag-${prefix}'
-  location: location
+  location: avdLocation
   properties: {
     hostPoolArmPath: hostPool.id
     applicationGroupType: 'Desktop'
@@ -294,7 +297,7 @@ resource appGroup 'Microsoft.DesktopVirtualization/applicationGroups@2023-09-05'
 
 resource workspace 'Microsoft.DesktopVirtualization/workspaces@2023-09-05' = {
   name: 'ws-${prefix}'
-  location: location
+  location: avdLocation
   properties: {
     applicationGroupReferences: [ appGroup.id ]
   }
