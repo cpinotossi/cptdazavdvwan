@@ -131,6 +131,10 @@ resource fwRcg 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2023-09-
               '*.sfx.ms'
               #disable-next-line no-hardcoded-env-urls
               'graph.microsoft.com'
+              // Entra ID device registration
+              'enterpriseregistration.windows.net'
+              '*.microsoftazuread-sso.com'
+              'pas.windows.net'
             ]
           }
         ]
@@ -459,6 +463,9 @@ resource aadLogin 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
     type: 'AADLoginForWindows'
     typeHandlerVersion: '2.0'
     autoUpgradeMinorVersion: true
+    settings: {
+      mdmId: ''
+    }
   }
 }
 
