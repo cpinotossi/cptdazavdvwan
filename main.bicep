@@ -101,6 +101,13 @@ resource fwRcg 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2023-09-
               '*.digicert.com'
               '*.azure-dns.com'
               '*.azure-dns.net'
+              // AVD agent download + blob storage + general windows.net services
+              #disable-next-line no-hardcoded-env-urls
+              '*.blob.core.windows.net'
+              #disable-next-line no-hardcoded-env-urls
+              '*.servicebus.windows.net'
+              #disable-next-line no-hardcoded-env-urls
+              '*.core.windows.net'
             ]
           }
         ]
