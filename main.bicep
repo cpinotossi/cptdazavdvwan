@@ -370,6 +370,28 @@ resource roleAssignAvd 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
+// Storage account for the deployment script (subscription policy blocks shared key on auto-created ones)
+resource stDs 'Microsoft.Storage/storageAccounts@2023-01-01' = {
+  name: 'stds${take(uniqueString(resourceGroup().id, prefix), 18)}'
+  location: location
+  sku: { name: 'Standard_LRS' }
+  kind: 'StorageV2'
+  properties: {
+    allowSharedKeyAccess: true
+  }
+}
+
+// Storage Blob Data Contributor for the managed identity on the deployment script storage
+resource roleAssignStorage 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, uami.id, 'storage-contributor')
+  scope: stDs
+  properties: {
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  }
+}
+
 resource dsGetToken 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
   name: 'ds-avd-token-${prefix}'
   location: location
@@ -379,6 +401,9 @@ resource dsGetToken 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
     azPowerShellVersion: '12.0'
     retentionInterval: 'PT1H'
     timeout: 'PT10M'
+    storageAccountSettings: {
+      storageAccountName: stDs.name
+    }
     scriptContent: '''
       $token = (Get-AzWvdHostPoolRegistrationToken -ResourceGroupName $env:RG_NAME -HostPoolName $env:HP_NAME).Token
       if (-not $token) {
@@ -391,7 +416,7 @@ resource dsGetToken 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
       { name: 'HP_NAME', value: hostPool.name }
     ]
   }
-  dependsOn: [ roleAssignAvd ]
+  dependsOn: [ roleAssignAvd, roleAssignStorage ]
 }
 
 resource extAvdDsc 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
