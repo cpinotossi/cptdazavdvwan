@@ -1,0 +1,76 @@
+{
+  "cost": 59,
+  "interval": "PT5M",
+  "namespace": "Microsoft.Network/natGateways",
+  "resourceregion": "swedencentral",
+  "timespan": "2026-05-19T11:51:37Z/2026-05-19T12:51:37Z",
+  "value": [
+    {
+      "displayDescription": "Total number of Bytes transmitted within time period",
+      "errorCode": "Success",
+      "id": "/subscriptions/ff0bb075-6c44-44ee-bb64-d46ce828c62f/resourceGroups/rg-cptdazavdvwan/providers/Microsoft.Network/natGateways/natgw-avd-cptdazavdvwan/providers/Microsoft.Insights/metrics/ByteCount",
+      "name": {
+        "localizedValue": "Bytes",
+        "value": "ByteCount"
+      },
+      "resourceGroup": "rg-cptdazavdvwan",
+      "timeseries": [
+        {
+          "data": [
+            {
+              "timeStamp": "2026-05-19T11:51:00Z",
+              "total": 166566.0
+            },
+            {
+              "timeStamp": "2026-05-19T11:56:00Z",
+              "total": 96163.0
+            },
+            {
+              "timeStamp": "2026-05-19T12:01:00Z",
+              "total": 274664.0
+            },
+            {
+              "timeStamp": "2026-05-19T12:06:00Z",
+              "total": 132062.0
+            },
+            {
+              "timeStamp": "2026-05-19T12:11:00Z",
+              "total": 59742.0
+            },
+            {
+              "timeStamp": "2026-05-19T12:16:00Z",
+              "total": 250404.0
+            },
+            {
+              "timeStamp": "2026-05-19T12:21:00Z",
+              "total": 167265.0
+            },
+            {
+              "timeStamp": "2026-05-19T12:26:00Z",
+              "total": 102546.0
+            },
+            {
+              "timeStamp": "2026-05-19T12:31:00Z",
+              "total": 226015.0
+            },
+            {
+              "timeStamp": "2026-05-19T12:36:00Z",
+              "total": 143905.0
+            },
+            {
+              "timeStamp": "2026-05-19T12:41:00Z",
+              "total": 156204.0
+            },
+            {
+              "timeStamp": "2026-05-19T12:46:00Z",
+              "total": 164145.0
+            }
+          ],
+          "metadatavalues": []
+        }
+      ],
+      "type": "Microsoft.Insights/metrics",
+      "unit": "Bytes"
+    }
+  ]
+}

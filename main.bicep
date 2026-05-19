@@ -386,6 +386,7 @@ resource hostPool 'Microsoft.DesktopVirtualization/hostPools@2023-09-05' = {
     preferredAppGroupType: 'Desktop'
     maxSessionLimit: 5
     validationEnvironment: true
+    customRdpProperty: 'drivestoredirect:s:;usbdevicestoredirect:s:;redirectclipboard:i:1;redirectprinters:i:0;audiomode:i:0;videoplaybackmode:i:1;devicestoredirect:s:*;redirectcomports:i:1;redirectsmartcards:i:1;enablecredsspsupport:i:1;redirectwebauthn:i:1;use multimon:i:1;enablerdsaadauth:i:1;keyboardhook:i:2;'
     registrationInfo: {
       registrationTokenOperation: 'Update'
       expirationTime: dateTimeAdd(baseTime, 'PT24H')

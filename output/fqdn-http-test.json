@@ -1,0 +1,16 @@
+{
+  "value": [
+    {
+      "code": "ComponentStatus/StdOut/succeeded",
+      "displayStatus": "Provisioning succeeded",
+      "level": "Info",
+      "message": "Host                    Connected\n----                    ---------\noneocsp.microsoft.com        True\nwww.microsoft.com            True\nctldl.windowsupdate.com      True\nwww.msftconnecttest.com      True\n\n"
+    },
+    {
+      "code": "ComponentStatus/StdErr/succeeded",
+      "displayStatus": "Provisioning succeeded",
+      "level": "Info",
+      "message": ""
+    }
+  ]
+}

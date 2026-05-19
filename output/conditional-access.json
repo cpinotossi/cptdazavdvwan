@@ -1,0 +1,67 @@
+[
+  {
+    "displayName": "Secure password change on high user risk for Microsoft partners and vendors",
+    "state": "enabled",
+    "includeApps": [
+      "All"
+    ],
+    "excludeApps": [],
+    "includeUsers": [
+      "All"
+    ],
+    "grantControls": [
+      "mfa",
+      "passwordChange"
+    ],
+    "signInFrequency": null
+  },
+  {
+    "displayName": "Reauthentication on signin risk for Microsoft partners and vendors",
+    "state": "enabled",
+    "includeApps": [
+      "All"
+    ],
+    "excludeApps": [],
+    "includeUsers": [
+      "All"
+    ],
+    "grantControls": [
+      "mfa"
+    ],
+    "signInFrequency": {
+      "authenticationType": "primaryAndSecondaryAuthentication",
+      "frequencyInterval": "everyTime",
+      "isEnabled": true,
+      "type": null,
+      "value": null
+    }
+  },
+  {
+    "displayName": "Security info registration for Microsoft partners and vendors",
+    "state": "enabled",
+    "includeApps": [],
+    "excludeApps": [],
+    "includeUsers": [
+      "All"
+    ],
+    "grantControls": [
+      "block"
+    ],
+    "signInFrequency": null
+  },
+  {
+    "displayName": "Multifactor authentication for Microsoft partners and vendors",
+    "state": "enabled",
+    "includeApps": [
+      "All"
+    ],
+    "excludeApps": [],
+    "includeUsers": [
+      "All"
+    ],
+    "grantControls": [
+      "mfa"
+    ],
+    "signInFrequency": null
+  }
+]

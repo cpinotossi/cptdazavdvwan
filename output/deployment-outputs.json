@@ -1,0 +1,34 @@
+{
+  "avdVmName": {
+    "type": "String",
+    "value": "vm-avd-cptdazavdvwan"
+  },
+  "bastionName": {
+    "type": "String",
+    "value": "bas-cptdazavdvwan"
+  },
+  "firewallPrivateIp": {
+    "type": "String",
+    "value": "10.0.64.4"
+  },
+  "firewallPublicIp": {
+    "type": "String",
+    "value": "4.223.69.29"
+  },
+  "hostPoolName": {
+    "type": "String",
+    "value": "hp-cptdazavdvwan"
+  },
+  "natGatewayPublicIp": {
+    "type": "String",
+    "value": "20.91.242.226"
+  },
+  "routeTableId": {
+    "type": "String",
+    "value": "/subscriptions/ff0bb075-6c44-44ee-bb64-d46ce828c62f/resourceGroups/rg-cptdazavdvwan/providers/Microsoft.Network/routeTables/rt-avd-cptdazavdvwan"
+  },
+  "routeTableName": {
+    "type": "String",
+    "value": "rt-avd-cptdazavdvwan"
+  }
+}

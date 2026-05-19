@@ -1,0 +1,24 @@
+[
+  {
+    "addressPrefix": "WindowsVirtualDesktop",
+    "etag": "W/\"1d3ca6b5-cd20-4caf-abc5-1aa69db464d2\"",
+    "hasBgpOverride": false,
+    "id": "/subscriptions/ff0bb075-6c44-44ee-bb64-d46ce828c62f/resourceGroups/rg-cptdazavdvwan/providers/Microsoft.Network/routeTables/rt-avd-cptdazavdvwan/routes/avd-wvd-direct-internet",
+    "name": "avd-wvd-direct-internet",
+    "nextHopType": "Internet",
+    "provisioningState": "Succeeded",
+    "resourceGroup": "rg-cptdazavdvwan",
+    "type": "Microsoft.Network/routeTables/routes"
+  },
+  {
+    "addressPrefix": "10.99.0.0/16",
+    "etag": "W/\"1d3ca6b5-cd20-4caf-abc5-1aa69db464d2\"",
+    "hasBgpOverride": false,
+    "id": "/subscriptions/ff0bb075-6c44-44ee-bb64-d46ce828c62f/resourceGroups/rg-cptdazavdvwan/providers/Microsoft.Network/routeTables/rt-avd-cptdazavdvwan/routes/test-udr-more-specific",
+    "name": "test-udr-more-specific",
+    "nextHopType": "None",
+    "provisioningState": "Succeeded",
+    "resourceGroup": "rg-cptdazavdvwan",
+    "type": "Microsoft.Network/routeTables/routes"
+  }
+]

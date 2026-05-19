@@ -1,0 +1,98 @@
+{
+  "value": [
+    {
+      "addressPrefix": [
+        "10.1.0.0/16"
+      ],
+      "disableBgpRoutePropagation": false,
+      "nextHopIpAddress": [],
+      "nextHopType": "VnetLocal",
+      "source": "Default",
+      "state": "Active"
+    },
+    {
+      "addressPrefix": [
+        "10.0.0.0/16"
+      ],
+      "disableBgpRoutePropagation": false,
+      "nextHopIpAddress": [],
+      "nextHopType": "VNetPeering",
+      "source": "Default",
+      "state": "Active"
+    },
+    {
+      "addressPrefix": [
+        "192.168.0.0/16"
+      ],
+      "disableBgpRoutePropagation": false,
+      "nextHopIpAddress": [
+        "10.0.64.4"
+      ],
+      "nextHopType": "VirtualNetworkGateway",
+      "source": "VirtualNetworkGateway",
+      "state": "Active"
+    },
+    {
+      "addressPrefix": [
+        "0.0.0.0/0"
+      ],
+      "disableBgpRoutePropagation": false,
+      "nextHopIpAddress": [
+        "10.0.64.4"
+      ],
+      "nextHopType": "VirtualNetworkGateway",
+      "source": "VirtualNetworkGateway",
+      "state": "Active"
+    },
+    {
+      "addressPrefix": [
+        "10.0.0.0/8"
+      ],
+      "disableBgpRoutePropagation": false,
+      "nextHopIpAddress": [
+        "10.0.64.4"
+      ],
+      "nextHopType": "VirtualNetworkGateway",
+      "source": "VirtualNetworkGateway",
+      "state": "Active"
+    },
+    {
+      "addressPrefix": [
+        "172.16.0.0/12"
+      ],
+      "disableBgpRoutePropagation": false,
+      "nextHopIpAddress": [
+        "10.0.64.4"
+      ],
+      "nextHopType": "VirtualNetworkGateway",
+      "source": "VirtualNetworkGateway",
+      "state": "Active"
+    },
+    {
+      "addressPrefix": [
+        "172.183.252.22/32",
+        "57.156.73.192/28",
+        "57.156.5.248/29",
+        "51.5.0.0/16",
+        "40.64.144.0/20"
+      ],
+      "disableBgpRoutePropagation": false,
+      "name": "avd-wvd-direct-internet",
+      "nextHopIpAddress": [],
+      "nextHopType": "Internet",
+      "source": "User",
+      "state": "Active"
+    },
+    {
+      "addressPrefix": [
+        "10.99.0.0/16"
+      ],
+      "disableBgpRoutePropagation": false,
+      "name": "test-udr-more-specific",
+      "nextHopIpAddress": [],
+      "nextHopType": "None",
+      "source": "User",
+      "state": "Active"
+    }
+  ]
+}

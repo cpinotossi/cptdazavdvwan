@@ -1,0 +1,16 @@
+{
+  "value": [
+    {
+      "code": "ComponentStatus/StdOut/succeeded",
+      "displayStatus": "Provisioning succeeded",
+      "level": "Info",
+      "message": "Host                                       Connected\n----                                       ---------\nlogin.microsoftonline.com                       True\nrdweb.wvd.microsoft.com                         True\nrdbroker.wvd.microsoft.com                      True\ncatalogartifact.azureedge.net                   True\nwvdportalstorageblob.blob.core.windows.net      True\naka.ms                                          True\ngraph.microsoft.com                             True\n\n"
+    },
+    {
+      "code": "ComponentStatus/StdErr/succeeded",
+      "displayStatus": "Provisioning succeeded",
+      "level": "Info",
+      "message": ""
+    }
+  ]
+}
