@@ -370,14 +370,25 @@ resource roleAssignAvd 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
-// Storage account for the deployment script (subscription policy blocks shared key on auto-created ones)
+// Storage account for deployment script (Entra ID auth, no shared key needed)
 resource stDs 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: 'stds${take(uniqueString(resourceGroup().id, prefix), 18)}'
   location: location
   sku: { name: 'Standard_LRS' }
   kind: 'StorageV2'
   properties: {
-    allowSharedKeyAccess: true
+    allowSharedKeyAccess: false
+  }
+}
+
+// Storage File Data Privileged Contributor - required when shared key is disabled
+resource roleAssignStorageFile 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, uami.id, 'storage-file-privileged')
+  scope: stDs
+  properties: {
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '69566ab7-960f-475b-8e7c-b3118f30c6bd')
   }
 }
 
@@ -416,7 +427,7 @@ resource dsGetToken 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
       { name: 'HP_NAME', value: hostPool.name }
     ]
   }
-  dependsOn: [ roleAssignAvd, roleAssignStorage ]
+  dependsOn: [ roleAssignAvd, roleAssignStorage, roleAssignStorageFile ]
 }
 
 resource extAvdDsc 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
