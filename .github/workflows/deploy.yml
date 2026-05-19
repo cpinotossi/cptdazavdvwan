@@ -95,7 +95,7 @@ jobs:
               \"configurationFunction\": \"Configuration.ps1\\\\AddSessionHost\",
               \"properties\": {
                 \"hostPoolName\": \"${HP}\",
-                \"registrationInfoRegistrationToken\": \"${TOKEN}\",
+                \"registrationInfoToken\": \"${TOKEN}\",
                 \"aadJoin\": false
               }
             }" \
