@@ -5,8 +5,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - '*.bicep'
-      - '*.bicepparam'
+      - 'infra/**'
       - '.github/workflows/**'
 
 permissions:
@@ -34,15 +33,11 @@ jobs:
         run: az group create --name "rg-${{ env.PREFIX }}" --location "${{ env.LOCATION }}"
 
       - name: Deploy Bicep
-        env:
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          KV_RG: ${{ secrets.KV_RG }}
-          KV_NAME: ${{ secrets.KV_NAME }}
         run: |
           az deployment group create \
             --resource-group "rg-${{ env.PREFIX }}" \
-            --template-file main.bicep \
-            --parameters main.bicepparam \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
             --verbose
 
       - name: Show deployment operations on failure

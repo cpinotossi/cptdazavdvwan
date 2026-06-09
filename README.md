@@ -32,6 +32,9 @@ Check effective routes on the AVD NIC to verify the more-specific UDR wins.
 
 ## Deploy
 
+Single resource-group deployment. The VM admin password is set directly in
+`infra/main.bicepparam` (cleartext, by design — VMs have no public IP, access via Bastion only).
+
 ### Via GitHub Actions
 
 Push to `main` or trigger manually. Required secrets:
@@ -41,8 +44,6 @@ Push to `main` or trigger manually. Required secrets:
 | AZURE_CLIENT_ID | Service principal (federated) |
 | AZURE_TENANT_ID | Entra ID tenant |
 | AZURE_SUBSCRIPTION_ID | Target subscription |
-| KV_RG | Key Vault resource group |
-| KV_NAME | Key Vault name (must have `vm-admin-password` secret) |
 
 ### Manual
 
@@ -51,11 +52,11 @@ export LOCATION=swedencentral
 export PREFIX=cptdazavdvwan
 export ADMIN_USERNAME=chpinoto
 export AZURE_SUBSCRIPTION_ID=<your-sub-id>
-export KV_RG=<your-kv-rg>
-export KV_NAME=<your-kv-name>
 
+az account set --subscription "$AZURE_SUBSCRIPTION_ID"
 az group create -n rg-$PREFIX -l $LOCATION
-az deployment group create -g rg-$PREFIX -f main.bicep -p main.bicepparam
+az deployment group create -g rg-$PREFIX \
+  -f infra/main.bicep -p infra/main.bicepparam
 ```
 
 ## Validate
