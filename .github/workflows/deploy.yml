@@ -6,7 +6,8 @@ on:
     branches: [ main ]
     paths:
       - 'infra/**'
-      - '.github/workflows/**'
+      - '!infra/chaos/**'
+      - '.github/workflows/deploy.yml'
 
 permissions:
   id-token: write
