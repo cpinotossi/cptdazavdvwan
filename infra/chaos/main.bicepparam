@@ -3,8 +3,8 @@ using './main.bicep'
 param prefix   = readEnvironmentVariable('PREFIX', 'cptdazavdvwan')
 param location = readEnvironmentVariable('LOCATION', 'swedencentral')
 
-// How long the AVD session host stays down once the experiment runs.
+// How long the CPU pressure is applied once the experiment runs.
 param experimentDuration = 'PT10M'
 
-// false = graceful guest OS shutdown, true = hard power-off.
-param abruptShutdown = false
+// Target CPU utilization percentage (1-99).
+param cpuPressureLevel = 95

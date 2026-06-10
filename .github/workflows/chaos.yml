@@ -31,6 +31,19 @@ jobs:
       - name: Register Chaos resource provider
         run: az provider register --namespace Microsoft.Chaos --wait
 
+      - name: Ensure user-assigned identity and attach to VM
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          VM="vm-avd-${{ env.PREFIX }}"
+          UAMI="id-chaos-${{ env.PREFIX }}"
+
+          echo "=== Create user-assigned managed identity (idempotent) ==="
+          az identity create -g "$RG" -n "$UAMI" -l "${{ env.LOCATION }}"
+          UAMI_ID=$(az identity show -g "$RG" -n "$UAMI" --query id -o tsv)
+
+          echo "=== Attach UAMI to the session host VM (idempotent) ==="
+          az vm identity assign -g "$RG" -n "$VM" --identities "$UAMI_ID"
+
       - name: Deploy Chaos Studio Bicep
         run: |
           az deployment group create \

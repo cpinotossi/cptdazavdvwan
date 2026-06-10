@@ -1,6 +1,11 @@
 // chaos/main.bicep - Azure Chaos Studio for cptdazavdvwan
-// Onboards the AVD session host VM as a service-direct Chaos target and defines a
-// VM shutdown experiment used to negatively influence the session host on demand.
+// Onboards the AVD session host VM as an agent-based Chaos target and defines a
+// CPU-pressure experiment used to put the session host under load on demand.
+//
+// Prerequisite handled by the chaos GitHub workflow (not by this template):
+//   A user-assigned managed identity 'id-chaos-<prefix>' exists and is ASSIGNED
+//   to the VM. Agent-based faults require the UAMI on the VM, which cannot be
+//   patched onto an existing VM from a separate Bicep stack.
 
 targetScope = 'resourceGroup'
 
@@ -10,33 +15,74 @@ param prefix string = 'cptdazavdvwan'
 @description('Azure region for the Chaos resources.')
 param location string = resourceGroup().location
 
-@description('ISO8601 duration the session host stays shut down during the experiment.')
+@description('Name of the user-assigned managed identity the Chaos agent authenticates with.')
+param chaosIdentityName string = 'id-chaos-${prefix}'
+
+@description('Entra tenant ID for the agent identity.')
+param tenantId string = subscription().tenantId
+
+@description('ISO8601 duration the CPU pressure is applied during the experiment.')
 param experimentDuration string = 'PT10M'
 
-@description('Abruptly power off the VM (true) or gracefully shut down the guest OS (false).')
-param abruptShutdown bool = false
+@description('Target CPU utilization percentage during the experiment.')
+@minValue(1)
+@maxValue(99)
+param cpuPressureLevel int = 95
 
 var vmName = 'vm-avd-${prefix}'
-var experimentName = 'exp-shutdown-${prefix}'
-var shutdownCapabilityUrn = 'urn:csci:microsoft:virtualMachine:shutdown/1.0'
+var experimentName = 'exp-cpu-${prefix}'
+var cpuFaultUrn = 'urn:csci:microsoft:agent:cpuPressure/1.0'
 
-// Virtual Machine Contributor - lets the experiment identity stop/start the VM.
-var vmContributorRoleId = '9980e02c-c2be-4d73-94e8-173b1dc7cf3c'
+// Reader is the required role for agent-based faults (needs */read on the target).
+var readerRoleId = 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
 
 resource vmAvd 'Microsoft.Compute/virtualMachines@2023-09-01' existing = {
   name: vmName
 }
 
-// Service-direct Chaos target (extension resource on the VM).
-resource chaosTarget 'Microsoft.Chaos/targets@2024-01-01' = {
-  name: 'Microsoft-VirtualMachine'
-  scope: vmAvd
-  properties: {}
+resource chaosIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  name: chaosIdentityName
 }
 
-resource shutdownCapability 'Microsoft.Chaos/targets/capabilities@2024-01-01' = {
-  parent: chaosTarget
-  name: 'Shutdown-1.0'
+// Agent-based Chaos target (extension resource on the VM).
+resource agentTarget 'Microsoft.Chaos/targets@2024-01-01' = {
+  name: 'Microsoft-Agent'
+  scope: vmAvd
+  properties: {
+    identities: [
+      {
+        type: 'AzureManagedIdentity'
+        clientId: chaosIdentity.properties.clientId
+        tenantId: tenantId
+      }
+    ]
+  }
+}
+
+resource cpuCapability 'Microsoft.Chaos/targets/capabilities@2024-01-01' = {
+  parent: agentTarget
+  name: 'CPUPressure-1.0'
+}
+
+// Chaos Studio agent (Windows) installed as a VM extension. Authenticates with the
+// UAMI and registers against the agent profile created by the target above.
+resource chaosAgent 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
+  parent: vmAvd
+  name: 'ChaosAgent'
+  location: location
+  properties: {
+    publisher: 'Microsoft.Azure.Chaos'
+    type: 'ChaosWindowsAgent'
+    typeHandlerVersion: '1.1'
+    autoUpgradeMinorVersion: true
+    settings: {
+      profile: agentTarget.properties.agentProfileId
+      'auth.msi.clientid': chaosIdentity.properties.clientId
+    }
+  }
+  dependsOn: [
+    cpuCapability
+  ]
 }
 
 resource experiment 'Microsoft.Chaos/experiments@2024-01-01' = {
@@ -53,27 +99,27 @@ resource experiment 'Microsoft.Chaos/experiments@2024-01-01' = {
         targets: [
           {
             type: 'ChaosTarget'
-            id: chaosTarget.id
+            id: agentTarget.id
           }
         ]
       }
     ]
     steps: [
       {
-        name: 'shutdown-session-host'
+        name: 'cpu-pressure-step'
         branches: [
           {
-            name: 'branch-shutdown'
+            name: 'branch-cpu'
             actions: [
               {
                 type: 'continuous'
-                name: shutdownCapabilityUrn
+                name: cpuFaultUrn
                 selectorId: 'avd-host'
                 duration: experimentDuration
                 parameters: [
                   {
-                    key: 'abruptShutdown'
-                    value: '${abruptShutdown}'
+                    key: 'pressureLevel'
+                    value: '${cpuPressureLevel}'
                   }
                 ]
               }
@@ -85,18 +131,18 @@ resource experiment 'Microsoft.Chaos/experiments@2024-01-01' = {
   }
 }
 
-// Grant the experiment identity permission to power the VM off/on.
-resource vmContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+// Reader on the VM lets the experiment identity discover and target the agent.
+resource readerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   scope: subscription()
-  name: vmContributorRoleId
+  name: readerRoleId
 }
 
-resource experimentRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(vmAvd.id, experiment.id, vmContributor.id)
+resource experimentReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(vmAvd.id, experiment.id, readerRole.id)
   scope: vmAvd
   properties: {
     principalId: experiment.identity.principalId
-    roleDefinitionId: vmContributor.id
+    roleDefinitionId: readerRole.id
     principalType: 'ServicePrincipal'
   }
 }
