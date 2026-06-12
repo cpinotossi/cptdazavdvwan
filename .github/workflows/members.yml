@@ -1,0 +1,46 @@
+name: Deploy Group Membership
+
+# Dynamic membership pipeline. Edit infra/identity/members.bicepparam (add/remove object IDs)
+# and push, or run manually. The .bicepparam list is the single source of truth: users not
+# listed are removed from the group ('replace' semantics in members.bicep).
+#
+# Decoupled from the AVD/Chaos infrastructure on purpose so frequent access changes have a
+# small blast radius and a focused PR/audit trail.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra/identity/members.bicep'
+      - 'infra/identity/members.bicepparam'
+      - 'infra/identity/shared.bicep'
+      - 'infra/identity/bicepconfig.json'
+      - '.github/workflows/members.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  PREFIX: cptdazavdvwan
+
+jobs:
+  members:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy group membership
+        run: |
+          az deployment group create \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --name identity-members \
+            --template-file infra/identity/members.bicep \
+            --parameters infra/identity/members.bicepparam

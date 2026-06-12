@@ -44,6 +44,18 @@ jobs:
           echo "=== Attach UAMI to the session host VM (idempotent) ==="
           az vm identity assign -g "$RG" -n "$VM" --identities "$UAMI_ID"
 
+      - name: Resolve Chaos operator group
+        run: |
+          # The group is created by the AVD deploy (infra/identity/main.bicep). Look up its
+          # object ID by uniqueName and pass it to chaos/main.bicepparam (readEnvironmentVariable).
+          CHAOS_GROUP=$(az ad group list \
+            --filter "uniqueName eq 'grp-avd-chaos-${{ env.PREFIX }}'" \
+            --query "[0].id" -o tsv)
+          if [ -z "$CHAOS_GROUP" ]; then
+            echo "::warning::Chaos operator group not found; run the AVD deploy first. Skipping role assignment."
+          fi
+          echo "CHAOS_OPERATOR_GROUP_OBJECT_ID=$CHAOS_GROUP" >> "$GITHUB_ENV"
+
       - name: Deploy Chaos Studio Bicep
         run: |
           az deployment group create \

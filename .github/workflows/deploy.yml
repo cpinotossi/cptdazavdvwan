@@ -7,6 +7,8 @@ on:
     paths:
       - 'infra/**'
       - '!infra/chaos/**'
+      - '!infra/identity/members.bicep'
+      - '!infra/identity/members.bicepparam'
       - '.github/workflows/deploy.yml'
 
 permissions:
@@ -32,6 +34,19 @@ jobs:
 
       - name: Create Resource Group
         run: az group create --name "rg-${{ env.PREFIX }}" --location "${{ env.LOCATION }}"
+
+      - name: Deploy Entra security groups
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          az deployment group create \
+            --resource-group "$RG" \
+            --name identity-groups \
+            --template-file infra/identity/main.bicep \
+            --parameters infra/identity/main.bicepparam
+          # Pass the AVD group object ID to the AVD deployment via main.bicepparam (readEnvironmentVariable).
+          AVD_GROUP=$(az deployment group show -g "$RG" -n identity-groups \
+            --query properties.outputs.avdUserGroupObjectId.value -o tsv)
+          echo "AVD_USER_GROUP_OBJECT_ID=$AVD_GROUP" >> "$GITHUB_ENV"
 
       - name: Deploy Bicep
         run: |
