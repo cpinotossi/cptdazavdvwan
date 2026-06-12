@@ -1,0 +1,12 @@
+######## Standard-Host : vm-avd-cptdazavdvwan ########
+1) Voraussetzung UDP-Transport : AKTIV (Default, fClientDisableUDP nicht gesetzt)
+2) Managed-Networks-Listener   : aus
+3) Tatsaechlich genutzt        : JA (Event 135 zuletzt 06/10/2026 15:11:42)
+
+
+######## Shortpath-Host : vm-shortpath-cptdazavdvwan ########
+1) Voraussetzung UDP-Transport : AKTIV (Default, fClientDisableUDP nicht gesetzt)
+2) Managed-Networks-Listener   : aus
+3) Tatsaechlich genutzt        : noch keine UDP-Sitzung (kein Event 135)
+
+

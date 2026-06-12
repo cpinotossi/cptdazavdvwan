@@ -13,7 +13,7 @@
   },
   "firewallPublicIp": {
     "type": "String",
-    "value": "4.223.69.29"
+    "value": "4.223.154.110"
   },
   "hostPoolName": {
     "type": "String",
@@ -21,7 +21,7 @@
   },
   "natGatewayPublicIp": {
     "type": "String",
-    "value": "20.91.242.226"
+    "value": "20.91.239.174"
   },
   "routeTableId": {
     "type": "String",

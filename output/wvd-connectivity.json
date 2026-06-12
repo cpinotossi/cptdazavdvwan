@@ -4,7 +4,7 @@
       "code": "ComponentStatus/StdOut/succeeded",
       "displayStatus": "Provisioning succeeded",
       "level": "Info",
-      "message": "ComputerName     : rdweb.wvd.microsoft.com\nRemoteAddress    : 40.64.146.227\nRemotePort       : 443\nInterfaceAlias   : Ethernet\nSourceAddress    : 10.1.1.4\nTcpTestSucceeded : True\n\n\n"
+      "message": "ComputerName     : rdweb.wvd.microsoft.com\nRemoteAddress    : 40.64.146.225\nRemotePort       : 443\nInterfaceAlias   : Ethernet\nSourceAddress    : 10.1.1.4\nTcpTestSucceeded : True\n\n\n"
     },
     {
       "code": "ComponentStatus/StdErr/succeeded",

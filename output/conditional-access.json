@@ -21,7 +21,9 @@
     "includeApps": [
       "All"
     ],
-    "excludeApps": [],
+    "excludeApps": [
+      "9cdead84-a844-4324-93f2-b2e6bb768d07"
+    ],
     "includeUsers": [
       "All"
     ],

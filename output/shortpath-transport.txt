@@ -1,0 +1,3 @@
+UDP transport: DEFAULT (enabled). Public-networks Shortpath (STUN/TURN) can be used.
+Managed-networks listener (fUseUdpPortRedirector): not set (managed-networks Shortpath off)
+
