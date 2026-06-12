@@ -37,6 +37,25 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Wait for security groups to exist
+        run: |
+          # members.bicep uses 'replace' semantics (PATCH), which requires the groups
+          # to already exist (they are created by deploy.yml / infra/identity/main.bicep).
+          # On a first push both workflows run in parallel, so wait for the groups here
+          # instead of failing with Request_ResourceNotFound.
+          for NAME in "grp-avd-users-${{ env.PREFIX }}" "grp-avd-chaos-${{ env.PREFIX }}"; do
+            echo "Waiting for group $NAME ..."
+            for i in $(seq 1 30); do
+              ID=$(az ad group list --filter "uniqueName eq '$NAME'" --query "[0].id" -o tsv)
+              if [ -n "$ID" ]; then echo "  found: $ID"; break; fi
+              if [ "$i" -eq 30 ]; then
+                echo "::error::Group $NAME not found after waiting. Run the AVD deploy (deploy.yml) first."
+                exit 1
+              fi
+              sleep 10
+            done
+          done
+
       - name: Deploy group membership
         run: |
           az deployment group create \
