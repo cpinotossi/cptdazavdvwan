@@ -7,6 +7,7 @@ on:
     paths:
       - 'infra/**'
       - '!infra/chaos/**'
+      - '!infra/shortpath/**'
       - '!infra/identity/members.bicep'
       - '!infra/identity/members.bicepparam'
       - '.github/workflows/deploy.yml'

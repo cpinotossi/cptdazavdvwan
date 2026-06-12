@@ -1,0 +1,120 @@
+name: Deploy RDP Shortpath Session Host
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra/shortpath/**'
+      - '.github/workflows/shortpath.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  LOCATION: swedencentral
+  PREFIX: cptdazavdvwan
+  ADMIN_USERNAME: chpinoto
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve AVD user group
+        run: |
+          # Reuse the same security group as the primary stack (created by infra/identity).
+          AVD_GROUP=$(az ad group list \
+            --filter "uniqueName eq 'grp-avd-users-${{ env.PREFIX }}'" \
+            --query "[0].id" -o tsv)
+          echo "AVD_USER_GROUP_OBJECT_ID=$AVD_GROUP" >> "$GITHUB_ENV"
+          echo "Resolved AVD user group: ${AVD_GROUP:-<not found>}"
+
+      - name: Deploy Shortpath Bicep
+        run: |
+          az deployment group create \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --name shortpath \
+            --template-file infra/shortpath/main.bicep \
+            --parameters infra/shortpath/main.bicepparam \
+            --verbose
+
+      - name: Show deployment operations on failure
+        if: failure()
+        run: |
+          echo "=== Failed Operations ==="
+          az deployment operation group list \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --name shortpath \
+            --query "[?properties.provisioningState=='Failed'].{resource:properties.targetResource.resourceName, error:properties.statusMessage.error}" \
+            --output json
+
+      - name: Register Shortpath Session Host
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          HP="hp-shortpath-${{ env.PREFIX }}"
+          VM="vm-shortpath-${{ env.PREFIX }}"
+
+          echo "=== Retrieving AVD registration token ==="
+          TOKEN=$(az desktopvirtualization hostpool retrieve-registration-token \
+            --resource-group "$RG" \
+            --name "$HP" \
+            --query token -o tsv)
+
+          if [ -z "$TOKEN" ]; then
+            echo "Token empty, generating new one..."
+            TOKEN=$(az rest --method POST \
+              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RG}/providers/Microsoft.DesktopVirtualization/hostPools/${HP}/registrationTokens?api-version=2023-09-05" \
+              --body '{"expirationTime":"'"$(date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%S.0000000Z)"'"}' \
+              --query token -o tsv)
+          fi
+
+          echo "=== Installing DSC extension for AVD agent ==="
+          az vm extension set \
+            --resource-group "$RG" \
+            --vm-name "$VM" \
+            --name "DSC" \
+            --publisher "Microsoft.Powershell" \
+            --version "2.73" \
+            --settings "{
+              \"modulesUrl\": \"https://wvdportalstorageblob.blob.core.windows.net/galleryartifacts/Configuration_1.0.02797.442.zip\",
+              \"configurationFunction\": \"Configuration.ps1\\\\AddSessionHost\",
+              \"properties\": {
+                \"hostPoolName\": \"${HP}\",
+                \"registrationInfoToken\": \"${TOKEN}\",
+                \"aadJoin\": true
+              }
+            }" \
+            --verbose
+
+      - name: Verify RDP Shortpath readiness (public networks)
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          VM="vm-shortpath-${{ env.PREFIX }}"
+          echo "=== Running avdnettest.exe on the Shortpath session host ==="
+          az vm run-command invoke \
+            --resource-group "$RG" \
+            --name "$VM" \
+            --command-id RunPowerShellScript \
+            --scripts "
+              \$u='https://raw.githubusercontent.com/Azure/RDS-Templates/master/AVD-TestShortpath/avdnettest.exe'
+              \$o=\"\$env:TEMP\\avdnettest.exe\"
+              try {
+                Invoke-WebRequest -Uri \$u -OutFile \$o -UseBasicParsing -TimeoutSec 30
+                & \$o
+              } catch { Write-Output \"avdnettest failed: \$_\" }
+              Write-Output ''
+              Write-Output '--- RDP transport protocol setting (default = UDP enabled) ---'
+              Get-ItemProperty 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services' ``
+                -Name fUseUdpPortRedirector,UdpPortNumber -ErrorAction SilentlyContinue |
+                Format-List fUseUdpPortRedirector,UdpPortNumber
+            " \
+            --output json | jq -r '.value[].message'
