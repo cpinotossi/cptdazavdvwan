@@ -23,6 +23,15 @@ param adminPassword string
 @description('Base time for AVD token expiration.')
 param baseTime string = utcNow()
 
+@description('Entra object ID of the security GROUP that gets AVD access, Reader on the resource group, and sign-in rights on the session host. Add/remove users via group membership without redeploying. Leave empty to skip these role assignments.')
+param avdUserGroupObjectId string = ''
+
+// ---- Built-in role definition IDs ----
+var readerRoleId = 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
+var desktopVirtualizationUserRoleId = '1d18fff3-a72a-46b5-b4a9-0b38a3cd7e63'
+var virtualMachineUserLoginRoleId = 'fb879df8-f326-4884-b1cf-06f3ad86be52'
+var assignAvdGroup = !empty(avdUserGroupObjectId)
+
 // ---- Address Spaces ----
 var hubAddr = '10.0.0.0/16'
 var avdSpokeAddr = '10.1.0.0/16'
@@ -469,6 +478,41 @@ resource aadLogin 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
     settings: {
       mdmId: ''
     }
+  }
+}
+
+// ============ End-user RBAC ============
+// Least-privilege access for the AVD user group (members added/removed via group membership):
+//  - Desktop Virtualization User on the application group  -> may use the published desktop
+//  - Virtual Machine User Login on the session host        -> may sign in to the Entra-joined VM
+//  - Reader on the resource group                          -> may view the resources
+resource avdUserAppGroup 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (assignAvdGroup) {
+  name: guid(appGroup.id, avdUserGroupObjectId, desktopVirtualizationUserRoleId)
+  scope: appGroup
+  properties: {
+    principalId: avdUserGroupObjectId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', desktopVirtualizationUserRoleId)
+    principalType: 'Group'
+  }
+}
+
+resource avdUserVmLogin 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (assignAvdGroup) {
+  name: guid(vmAvd.id, avdUserGroupObjectId, virtualMachineUserLoginRoleId)
+  scope: vmAvd
+  properties: {
+    principalId: avdUserGroupObjectId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', virtualMachineUserLoginRoleId)
+    principalType: 'Group'
+  }
+}
+
+resource avdUserReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (assignAvdGroup) {
+  name: guid(resourceGroup().id, avdUserGroupObjectId, readerRoleId)
+  scope: resourceGroup()
+  properties: {
+    principalId: avdUserGroupObjectId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', readerRoleId)
+    principalType: 'Group'
   }
 }
 

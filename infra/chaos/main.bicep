@@ -29,12 +29,18 @@ param experimentDuration string = 'PT10M'
 @maxValue(99)
 param cpuPressureLevel int = 95
 
+@description('Entra object ID of the security GROUP allowed to start/stop the Chaos experiment. Manage members via group membership without redeploying. Leave empty to skip the role assignment.')
+param chaosOperatorGroupObjectId string = ''
+
 var vmName = 'vm-avd-${prefix}'
 var experimentName = 'exp-cpu-${prefix}'
 var cpuFaultUrn = 'urn:csci:microsoft:agent:cpuPressure/1.0'
 
 // Reader is the required role for agent-based faults (needs */read on the target).
 var readerRoleId = 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
+
+// Chaos Studio Operator: can run (start/cancel) experiments without managing them.
+var chaosOperatorRoleId = '1a40e87e-6645-48e0-b27a-0b115d849a20'
 
 resource vmAvd 'Microsoft.Compute/virtualMachines@2023-09-01' existing = {
   name: vmName
@@ -144,6 +150,17 @@ resource experimentReader 'Microsoft.Authorization/roleAssignments@2022-04-01' =
     principalId: experiment.identity.principalId
     roleDefinitionId: readerRole.id
     principalType: 'ServicePrincipal'
+  }
+}
+
+// Chaos Studio Operator lets the user group start and stop this experiment only.
+resource experimentOperator 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(chaosOperatorGroupObjectId)) {
+  name: guid(experiment.id, chaosOperatorGroupObjectId, chaosOperatorRoleId)
+  scope: experiment
+  properties: {
+    principalId: chaosOperatorGroupObjectId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', chaosOperatorRoleId)
+    principalType: 'Group'
   }
 }
 
