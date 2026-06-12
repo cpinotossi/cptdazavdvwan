@@ -80,6 +80,12 @@ Die Verifikation erfolgt am Host bzw. zur Verbindungszeit. Im Stil dieses Repos
 Prüft STUN/TURN-Erreichbarkeit und NAT-Typ – sagt aus, ob Public-Networks-Shortpath
 funktionieren wird. Über Run Command auf dem dedizierten Host:
 
+> Hinweis: Der Session Host in diesem Lab egressed über die Azure Firewall mit einer
+> FQDN-Allow-Liste, die `raw.githubusercontent.com` **nicht** enthält. Der direkte
+> Download von `avdnettest.exe` auf dem Host schlägt daher fehl. Lade das Tool auf
+> einem Client mit freiem Internetzugang herunter und führe es dort aus, oder füge
+> eine Application Rule für `raw.githubusercontent.com` zur Firewall hinzu.
+
 ```bash
 RG="rg-cptdazavdvwan"
 VM="vm-shortpath-cptdazavdvwan"

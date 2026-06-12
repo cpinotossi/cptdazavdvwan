@@ -99,22 +99,26 @@ jobs:
         run: |
           RG="rg-${{ env.PREFIX }}"
           VM="vm-shortpath-${{ env.PREFIX }}"
-          echo "=== Running avdnettest.exe on the Shortpath session host ==="
+          # avdnettest.exe is NOT downloaded here: the session host egresses through
+          # Azure Firewall with an FQDN allow-list that does not include
+          # raw.githubusercontent.com. Final Shortpath verification is client-side
+          # (Connection Information dialog) or post-connection via Event ID 135 in
+          # Microsoft-Windows-RemoteDesktopServices-RdpCoreCDV/Operational.
+          echo "=== Checking RDP transport protocol default on the Shortpath host ==="
           az vm run-command invoke \
             --resource-group "$RG" \
             --name "$VM" \
             --command-id RunPowerShellScript \
             --scripts "
-              \$u='https://raw.githubusercontent.com/Azure/RDS-Templates/master/AVD-TestShortpath/avdnettest.exe'
-              \$o=\"\$env:TEMP\\avdnettest.exe\"
-              try {
-                Invoke-WebRequest -Uri \$u -OutFile \$o -UseBasicParsing -TimeoutSec 30
-                & \$o
-              } catch { Write-Output \"avdnettest failed: \$_\" }
-              Write-Output ''
-              Write-Output '--- RDP transport protocol setting (default = UDP enabled) ---'
-              Get-ItemProperty 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services' ``
-                -Name fUseUdpPortRedirector,UdpPortNumber -ErrorAction SilentlyContinue |
-                Format-List fUseUdpPortRedirector,UdpPortNumber
+              \$p='HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services'
+              \$v=Get-ItemProperty -Path \$p -Name fClientDisableUDP,SelectTransport,fUseUdpPortRedirector,UdpPortNumber -ErrorAction SilentlyContinue
+              if (\$null -eq \$v -or \$null -eq \$v.fClientDisableUDP) {
+                Write-Output 'UDP transport: DEFAULT (enabled). Public-networks Shortpath (STUN/TURN) can be used.'
+              } elseif (\$v.fClientDisableUDP -eq 1) {
+                Write-Output 'UDP transport: DISABLED by policy (fClientDisableUDP=1). Shortpath will fall back to TCP.'
+              } else {
+                Write-Output 'UDP transport: enabled (fClientDisableUDP=0).'
+              }
+              Write-Output ('Managed-networks listener (fUseUdpPortRedirector): ' + \$(if (\$v.fUseUdpPortRedirector) { \$v.fUseUdpPortRedirector } else { 'not set (managed-networks Shortpath off)' }))
             " \
             --output json | jq -r '.value[].message'
