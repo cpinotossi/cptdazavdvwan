@@ -1,0 +1,56 @@
+name: Teardown (delete resource group)
+
+# DESTRUCTIVE: deletes the entire lab resource group to save cost while the lab
+# is idle. Everything is IaC, so restore on Monday by running the deploy
+# workflows in order: deploy.yml -> members.yml -> shortpath.yml -> chaos.yml.
+#
+# Manual trigger only (no push trigger), and requires typing the resource group
+# name into the 'confirm' input as a safety check before anything is deleted.
+#
+# Note: Entra security groups (grp-avd-users, grp-avd-chaos) are tenant objects
+# outside the resource group and are NOT deleted here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type the resource group name to confirm deletion (rg-cptdazavdvwan)'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  PREFIX: cptdazavdvwan
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation input
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          if [ "${{ github.event.inputs.confirm }}" != "$RG" ]; then
+            echo "::error::Confirmation '${{ github.event.inputs.confirm }}' does not match '$RG'. Aborting."
+            exit 1
+          fi
+          echo "Confirmation matches $RG. Proceeding with deletion."
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete resource group
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          if [ "$(az group exists --name "$RG")" != "true" ]; then
+            echo "Resource group $RG does not exist. Nothing to delete."
+            exit 0
+          fi
+          echo "=== Deleting resource group $RG (waiting for completion) ==="
+          az group delete --name "$RG" --yes
+          echo "Resource group $RG deleted."
