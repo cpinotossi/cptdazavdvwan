@@ -10,6 +10,9 @@
 # WHY:
 #   - Graph 'Group.ReadWrite.All' (application) -> create/lookup Entra groups
 #     (deploy.yml identity step, members.yml, chaos.yml group lookup).
+#   - Graph 'Device.ReadWrite.All' (application) -> delete stale Entra device
+#     registrations (vmavd01/vmsp01) in the teardown.yml cleanup step so the
+#     next restore's AADLoginForWindows join does not hit 0x801c0083.
 #   - Azure RBAC 'User Access Administrator' -> Microsoft.Authorization/
 #     roleAssignments/write for the RBAC role assignments in main.bicep /
 #     chaos/main.bicep. (Skip if the SP is already Owner.)
@@ -26,6 +29,7 @@ RG="rg-${PREFIX}"
 
 GRAPH_APP_ID="00000003-0000-0000-c000-000000000000"          # Microsoft Graph
 GROUP_RW_ALL_ROLE_ID="62a82d76-70ea-41e2-9197-370581804d09"  # Group.ReadWrite.All (application)
+DEVICE_RW_ALL_ROLE_ID="1138cb37-bd11-4084-a2b7-9f71582aeddb" # Device.ReadWrite.All (application)
 
 echo "=== Resolve service principal object IDs ==="
 SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
@@ -46,6 +50,21 @@ else
     --headers "Content-Type=application/json" \
     --body "{\"principalId\":\"${SP_OBJECT_ID}\",\"resourceId\":\"${GRAPH_SP_OBJECT_ID}\",\"appRoleId\":\"${GROUP_RW_ALL_ROLE_ID}\"}"
   echo "Granted Group.ReadWrite.All."
+fi
+
+echo "=== Grant Microsoft Graph Device.ReadWrite.All (application) + admin consent ==="
+EXISTING_DEVICE=$(az rest --method GET \
+  --uri "https://graph.microsoft.com/v1.0/servicePrincipals/${SP_OBJECT_ID}/appRoleAssignments" \
+  --query "value[?appRoleId=='${DEVICE_RW_ALL_ROLE_ID}'] | [0].id" -o tsv 2>/dev/null || true)
+
+if [ -n "$EXISTING_DEVICE" ]; then
+  echo "Already granted (assignment ${EXISTING_DEVICE}); skipping."
+else
+  az rest --method POST \
+    --uri "https://graph.microsoft.com/v1.0/servicePrincipals/${SP_OBJECT_ID}/appRoleAssignments" \
+    --headers "Content-Type=application/json" \
+    --body "{\"principalId\":\"${SP_OBJECT_ID}\",\"resourceId\":\"${GRAPH_SP_OBJECT_ID}\",\"appRoleId\":\"${DEVICE_RW_ALL_ROLE_ID}\"}"
+  echo "Granted Device.ReadWrite.All."
 fi
 
 echo "=== Grant Azure RBAC 'User Access Administrator' on ${RG} ==="
