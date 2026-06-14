@@ -9,6 +9,14 @@ name: Teardown (delete resource group)
 #
 # Note: Entra security groups (grp-avd-users, grp-avd-chaos) are tenant objects
 # outside the resource group and are NOT deleted here.
+#
+# Stale Entra devices: deleting the RG removes the AVD VMs but NOT their Entra
+# device registrations (computer names vmavd01 / vmsp01). On the next restore the
+# AADLoginForWindows extension then fails with "hostname is already used by
+# another device in this tenant" (0x801c0083). This workflow deletes those stale
+# device objects so the restore joins cleanly. The cleanup is best-effort: if the
+# pipeline identity lacks Device.ReadWrite.All it logs a warning and continues
+# without failing the teardown.
 
 on:
   workflow_dispatch:
@@ -54,3 +62,31 @@ jobs:
           echo "=== Deleting resource group $RG (waiting for completion) ==="
           az group delete --name "$RG" --yes
           echo "Resource group $RG deleted."
+
+      - name: Delete stale Entra device registrations
+        run: |
+          # AVD session host OS computer names (NOT the Azure resource names).
+          DEVICE_NAMES="vmavd01 vmsp01"
+          for NAME in $DEVICE_NAMES; do
+            echo "=== Checking Entra device '$NAME' ==="
+            IDS=$(az rest --method GET \
+              --url "https://graph.microsoft.com/v1.0/devices?\$filter=displayName eq '$NAME'&\$select=id" \
+              --query "value[].id" -o tsv 2>/dev/null) || {
+                echo "::warning::Could not query devices for '$NAME' (missing Device.ReadWrite.All?). Skipping."
+                continue
+              }
+            if [ -z "$IDS" ]; then
+              echo "No Entra device '$NAME' found. Nothing to delete."
+              continue
+            fi
+            for ID in $IDS; do
+              echo "Deleting Entra device '$NAME' (objectId $ID) ..."
+              if az rest --method DELETE \
+                --url "https://graph.microsoft.com/v1.0/devices/$ID" 2>/dev/null; then
+                echo "  -> deleted"
+              else
+                echo "::warning::Failed to delete device '$NAME' ($ID). Delete it manually before restore."
+              fi
+            done
+          done
+          echo "Stale Entra device cleanup complete."
