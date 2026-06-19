@@ -36,6 +36,7 @@ var assignAvdGroup = !empty(avdUserGroupObjectId)
 var hubAddr = '10.0.0.0/16'
 var avdSpokeAddr = '10.1.0.0/16'
 var avdHostSubnet = '10.1.1.0/24'
+var avdPeSubnet = '10.1.2.0/24'
 var avdBastionSubnet = '10.1.10.0/26'
 
 // ============ Virtual WAN + Hub ============
@@ -347,6 +348,16 @@ resource vnetAvd 'Microsoft.Network/virtualNetworks@2023-09-01' = {
         }
       }
       { name: 'AzureBastionSubnet', properties: { addressPrefix: avdBastionSubnet } }
+      {
+        // Private Endpoint subnet (used by the infra/fslogix stack for the
+        // Azure Files private endpoint). Owned here so a deploy.yml re-run does
+        // not stomp a subnet added out-of-band by the fslogix stack.
+        name: 'snet-pe'
+        properties: {
+          addressPrefix: avdPeSubnet
+          privateEndpointNetworkPolicies: 'Disabled'
+        }
+      }
     ]
   }
 }

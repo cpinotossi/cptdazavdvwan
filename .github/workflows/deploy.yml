@@ -8,6 +8,7 @@ on:
       - 'infra/**'
       - '!infra/chaos/**'
       - '!infra/shortpath/**'
+      - '!infra/fslogix/**'
       - '!infra/identity/members.bicep'
       - '!infra/identity/members.bicepparam'
       - '.github/workflows/deploy.yml'

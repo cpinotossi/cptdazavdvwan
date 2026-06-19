@@ -1,0 +1,196 @@
+name: Deploy FSLogix Multi-Session Host
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra/fslogix/**'
+      - '.github/workflows/fslogix.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  LOCATION: swedencentral
+  PREFIX: cptdazavdvwan
+  ADMIN_USERNAME: chpinoto
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve AVD user group
+        run: |
+          # Reuse the same security group as the primary stack (created by infra/identity).
+          AVD_GROUP=$(az ad group list \
+            --filter "uniqueName eq 'grp-avd-users-${{ env.PREFIX }}'" \
+            --query "[0].id" -o tsv)
+          echo "AVD_USER_GROUP_OBJECT_ID=$AVD_GROUP" >> "$GITHUB_ENV"
+          echo "Resolved AVD user group: ${AVD_GROUP:-<not found>}"
+
+      - name: Deploy FSLogix Bicep
+        run: |
+          az deployment group create \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --name fslogix \
+            --template-file infra/fslogix/main.bicep \
+            --parameters infra/fslogix/main.bicepparam \
+            --verbose
+
+      - name: Show deployment operations on failure
+        if: failure()
+        run: |
+          echo "=== Failed Operations ==="
+          az deployment operation group list \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --name fslogix \
+            --query "[?properties.provisioningState=='Failed'].{resource:properties.targetResource.resourceName, error:properties.statusMessage.error}" \
+            --output json
+
+      - name: Capture deployment outputs
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          OUT=$(az deployment group show -g "$RG" -n fslogix --query properties.outputs -o json)
+          echo "STORAGE_FQDN=$(echo "$OUT" | jq -r '.storageFileFqdn.value')"   >> "$GITHUB_ENV"
+          echo "STORAGE_NAME=$(echo "$OUT" | jq -r '.storageAccountName.value')" >> "$GITHUB_ENV"
+          echo "FILE_SHARE=$(echo "$OUT"   | jq -r '.fileShareName.value')"      >> "$GITHUB_ENV"
+          echo "FSL_VM=$(echo "$OUT"       | jq -r '.vmName.value')"             >> "$GITHUB_ENV"
+          echo "FSL_HP=$(echo "$OUT"       | jq -r '.hostPoolName.value')"       >> "$GITHUB_ENV"
+          echo "=== FSLogix deployment outputs ==="
+          echo "$OUT" | jq '.'
+
+      - name: Register FSLogix Session Host
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          HP="${{ env.FSL_HP }}"
+          VM="${{ env.FSL_VM }}"
+
+          echo "=== Retrieving AVD registration token ==="
+          TOKEN=$(az desktopvirtualization hostpool retrieve-registration-token \
+            --resource-group "$RG" \
+            --name "$HP" \
+            --query token -o tsv)
+
+          if [ -z "$TOKEN" ]; then
+            echo "Token empty, generating new one..."
+            TOKEN=$(az rest --method POST \
+              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RG}/providers/Microsoft.DesktopVirtualization/hostPools/${HP}/registrationTokens?api-version=2023-09-05" \
+              --body '{"expirationTime":"'"$(date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%S.0000000Z)"'"}' \
+              --query token -o tsv)
+          fi
+
+          echo "=== Installing DSC extension for AVD agent ==="
+          az vm extension set \
+            --resource-group "$RG" \
+            --vm-name "$VM" \
+            --name "DSC" \
+            --publisher "Microsoft.Powershell" \
+            --version "2.73" \
+            --settings "{
+              \"modulesUrl\": \"https://wvdportalstorageblob.blob.core.windows.net/galleryartifacts/Configuration_1.0.02797.442.zip\",
+              \"configurationFunction\": \"Configuration.ps1\\\\AddSessionHost\",
+              \"properties\": {
+                \"hostPoolName\": \"${HP}\",
+                \"registrationInfoToken\": \"${TOKEN}\",
+                \"aadJoin\": true
+              }
+            }" \
+            --verbose
+
+      - name: Configure FSLogix profile container on the session host
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          VM="${{ env.FSL_VM }}"
+          UNC="\\\\${{ env.STORAGE_FQDN }}\\${{ env.FILE_SHARE }}"
+          echo "=== Pointing FSLogix at ${UNC} (single-line registry writes; no backtick continuation) ==="
+          az vm run-command invoke \
+            --resource-group "$RG" \
+            --name "$VM" \
+            --command-id RunPowerShellScript \
+            --scripts "
+              New-Item -Path 'HKLM:\\SOFTWARE\\FSLogix\\Profiles' -Force | Out-Null
+              New-ItemProperty -Path 'HKLM:\\SOFTWARE\\FSLogix\\Profiles' -Name Enabled -Type DWord -Value 1 -Force | Out-Null
+              New-ItemProperty -Path 'HKLM:\\SOFTWARE\\FSLogix\\Profiles' -Name VHDLocations -Type MultiString -Value '${UNC}' -Force | Out-Null
+              New-ItemProperty -Path 'HKLM:\\SOFTWARE\\FSLogix\\Profiles' -Name VolumeType -Type String -Value 'VHDX' -Force | Out-Null
+              New-ItemProperty -Path 'HKLM:\\SOFTWARE\\FSLogix\\Profiles' -Name FlipFlopProfileDirectoryName -Type DWord -Value 1 -Force | Out-Null
+              New-ItemProperty -Path 'HKLM:\\SOFTWARE\\FSLogix\\Profiles' -Name DeleteLocalProfileWhenVHDShouldApply -Type DWord -Value 1 -Force | Out-Null
+              New-Item -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\\Kerberos\\Parameters' -Force | Out-Null
+              New-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\\Kerberos\\Parameters' -Name CloudKerberosTicketRetrievalEnabled -Type DWord -Value 1 -Force | Out-Null
+              Write-Output 'FSLogix + cloud Kerberos registry configured.'
+            " \
+            --output json | jq -r '.value[].message'
+
+      - name: Enable Entra Kerberos admin consent + cloud-group SID tag (Option B, automated)
+        run: |
+          # Requires the pipeline SP to hold Graph Application.ReadWrite.All +
+          # DelegatedPermissionGrant.ReadWrite.All (granted via
+          # infra/identity/grant-pipeline-permissions.sh). See infra/fslogix/README.md.
+          set -euo pipefail
+          FQDN="${{ env.STORAGE_FQDN }}"
+          DISPLAY="[Storage Account] ${FQDN}"
+          GRAPH_APP_ID="00000003-0000-0000-c000-000000000000"
+
+          echo "=== Locating the storage account's auto-created Entra app: ${DISPLAY} ==="
+          APP_ID=""
+          for i in $(seq 1 12); do
+            APP_ID=$(az ad app list --filter "displayName eq '${DISPLAY}'" --query "[0].appId" -o tsv 2>/dev/null || true)
+            [ -n "$APP_ID" ] && break
+            echo "  not yet visible, retry $i/12 ..."; sleep 10
+          done
+          if [ -z "$APP_ID" ]; then
+            echo "::error:: Storage Entra app '${DISPLAY}' not found. Was AADKERB enabled? Aborting Kerberos post-config."
+            exit 1
+          fi
+          APP_OBJ_ID=$(az ad app show --id "$APP_ID" --query id -o tsv)
+          SP_OBJ_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv 2>/dev/null || true)
+          if [ -z "$SP_OBJ_ID" ]; then
+            SP_OBJ_ID=$(az ad sp create --id "$APP_ID" --query id -o tsv)
+          fi
+          GRAPH_SP_OBJ_ID=$(az ad sp show --id "$GRAPH_APP_ID" --query id -o tsv)
+          echo "App appId=${APP_ID} objId=${APP_OBJ_ID} sp=${SP_OBJ_ID}"
+
+          echo "=== Admin consent: grant delegated openid/profile/User.Read against Microsoft Graph ==="
+          EXISTING=$(az rest --method GET \
+            --uri "https://graph.microsoft.com/v1.0/servicePrincipals/${SP_OBJ_ID}/oauth2PermissionGrants" \
+            --query "value[?resourceId=='${GRAPH_SP_OBJ_ID}'] | [0].id" -o tsv 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            echo "Delegated grant already present (${EXISTING}); skipping."
+          else
+            az rest --method POST \
+              --uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" \
+              --headers "Content-Type=application/json" \
+              --body "{\"clientId\":\"${SP_OBJ_ID}\",\"consentType\":\"AllPrincipals\",\"resourceId\":\"${GRAPH_SP_OBJ_ID}\",\"scope\":\"openid profile User.Read\"}"
+            echo "Admin consent granted."
+          fi
+
+          echo "=== App manifest tag: kdc_enable_cloud_group_sids (mandatory for cloud-only groups) ==="
+          CURRENT_TAGS=$(az rest --method GET \
+            --uri "https://graph.microsoft.com/v1.0/applications/${APP_OBJ_ID}?\$select=tags" \
+            --query "tags" -o json)
+          if echo "$CURRENT_TAGS" | jq -e 'index("kdc_enable_cloud_group_sids")' >/dev/null; then
+            echo "Tag already present; skipping."
+          else
+            NEW_TAGS=$(echo "$CURRENT_TAGS" | jq -c '. + ["kdc_enable_cloud_group_sids"]')
+            az rest --method PATCH \
+              --uri "https://graph.microsoft.com/v1.0/applications/${APP_OBJ_ID}" \
+              --headers "Content-Type=application/json" \
+              --body "{\"tags\":${NEW_TAGS}}"
+            echo "Tag added."
+          fi
+          echo "=== Entra Kerberos post-config complete. ==="
+
+      - name: Reminder - Conditional Access / MFA exclusion
+        run: |
+          echo "::notice:: Ensure the storage app '[Storage Account] ${{ env.STORAGE_FQDN }}' is EXCLUDED from any"
+          echo "::notice:: Conditional Access / MFA policy. Entra Kerberos ticket acquisition happens silently at"
+          echo "::notice:: logon and cannot perform interactive step-up MFA. See infra/fslogix/README.md."

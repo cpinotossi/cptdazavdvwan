@@ -13,9 +13,16 @@
 #   - Graph 'Device.ReadWrite.All' (application) -> delete stale Entra device
 #     registrations (vmavd01/vmsp01) in the teardown.yml cleanup step so the
 #     next restore's AADLoginForWindows join does not hit 0x801c0083.
+#   - Graph 'Application.ReadWrite.All' (application) -> patch the auto-created
+#     Azure Files storage Entra app's manifest with the kdc_enable_cloud_group_sids
+#     tag in the fslogix.yml Entra Kerberos post-config step (Option B).
+#   - Graph 'DelegatedPermissionGrant.ReadWrite.All' (application) -> grant tenant
+#     admin consent (oauth2PermissionGrant) to the storage Entra app in the same
+#     fslogix.yml step. NOTE: these two are HIGH privilege (the pipeline can grant
+#     itself delegated permissions); see infra/fslogix/README.md for the trade-off.
 #   - Azure RBAC 'User Access Administrator' -> Microsoft.Authorization/
 #     roleAssignments/write for the RBAC role assignments in main.bicep /
-#     chaos/main.bicep. (Skip if the SP is already Owner.)
+#     chaos/main.bicep / fslogix/main.bicep. (Skip if the SP is already Owner.)
 #
 # Usage:
 #   APP_ID=<AZURE_CLIENT_ID value> SUBSCRIPTION_ID=<sub> PREFIX=cptdazavdvwan \
@@ -30,6 +37,8 @@ RG="rg-${PREFIX}"
 GRAPH_APP_ID="00000003-0000-0000-c000-000000000000"          # Microsoft Graph
 GROUP_RW_ALL_ROLE_ID="62a82d76-70ea-41e2-9197-370581804d09"  # Group.ReadWrite.All (application)
 DEVICE_RW_ALL_ROLE_ID="1138cb37-bd11-4084-a2b7-9f71582aeddb" # Device.ReadWrite.All (application)
+APP_RW_ALL_ROLE_ID="1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9"    # Application.ReadWrite.All (application)
+DELEG_GRANT_RW_ALL_ROLE_ID="8e8e4742-1d95-4f68-9d56-6ee75648c72a" # DelegatedPermissionGrant.ReadWrite.All (application)
 
 echo "=== Resolve service principal object IDs ==="
 SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
@@ -66,6 +75,25 @@ else
     --body "{\"principalId\":\"${SP_OBJECT_ID}\",\"resourceId\":\"${GRAPH_SP_OBJECT_ID}\",\"appRoleId\":\"${DEVICE_RW_ALL_ROLE_ID}\"}"
   echo "Granted Device.ReadWrite.All."
 fi
+
+# --- FSLogix Entra Kerberos automation (Option B): high-privilege Graph roles. ---
+for ROLE in "Application.ReadWrite.All:${APP_RW_ALL_ROLE_ID}" "DelegatedPermissionGrant.ReadWrite.All:${DELEG_GRANT_RW_ALL_ROLE_ID}"; do
+  ROLE_NAME="${ROLE%%:*}"
+  ROLE_ID="${ROLE##*:}"
+  echo "=== Grant Microsoft Graph ${ROLE_NAME} (application) + admin consent ==="
+  EXISTING_ROLE=$(az rest --method GET \
+    --uri "https://graph.microsoft.com/v1.0/servicePrincipals/${SP_OBJECT_ID}/appRoleAssignments" \
+    --query "value[?appRoleId=='${ROLE_ID}'] | [0].id" -o tsv 2>/dev/null || true)
+  if [ -n "$EXISTING_ROLE" ]; then
+    echo "Already granted (assignment ${EXISTING_ROLE}); skipping."
+  else
+    az rest --method POST \
+      --uri "https://graph.microsoft.com/v1.0/servicePrincipals/${SP_OBJECT_ID}/appRoleAssignments" \
+      --headers "Content-Type=application/json" \
+      --body "{\"principalId\":\"${SP_OBJECT_ID}\",\"resourceId\":\"${GRAPH_SP_OBJECT_ID}\",\"appRoleId\":\"${ROLE_ID}\"}"
+    echo "Granted ${ROLE_NAME}."
+  fi
+done
 
 echo "=== Grant Azure RBAC 'User Access Administrator' on ${RG} ==="
 echo "(Skip this block if the SP is already Owner on the subscription/RG.)"
