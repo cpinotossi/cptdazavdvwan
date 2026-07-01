@@ -66,7 +66,7 @@ jobs:
       - name: Delete stale Entra device registrations
         run: |
           # AVD session host OS computer names (NOT the Azure resource names).
-          DEVICE_NAMES="vmavd01 vmsp01"
+          DEVICE_NAMES="vmavd01 vmfsl01 vmsp01"
           for NAME in $DEVICE_NAMES; do
             echo "=== Checking Entra device '$NAME' ==="
             IDS=$(az rest --method GET \
