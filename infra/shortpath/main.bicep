@@ -6,7 +6,7 @@
 //    by default, so NO in-guest configuration (Group Policy / Intune / Machine
 //    Configuration) is required. The only network dependency is the Azure
 //    Firewall network rule 'rdp-shortpath-relay' (UDP 3478 -> 51.5.0.0/16),
-//    which already covers the whole AVD spoke (10.1.0.0/16) in infra/main.bicep.
+//    which already covers the whole AVD spoke (10.1.0.0/16) in infra/platform/main.bicep.
 //    A managed-networks listener (UDP 3390) would require an in-guest policy;
 //    that path is intentionally NOT used here.
 //  - Own host pool / app group / workspace for clean isolation from hp-<prefix>.
@@ -41,7 +41,7 @@ var desktopVirtualizationUserRoleId = '1d18fff3-a72a-46b5-b4a9-0b38a3cd7e63'
 var virtualMachineUserLoginRoleId = 'fb879df8-f326-4884-b1cf-06f3ad86be52'
 var assignAvdGroup = !empty(avdUserGroupObjectId)
 
-// ---- Existing AVD spoke (created by infra/main.bicep) ----
+// ---- Existing AVD spoke (created by infra/avd/main.bicep) ----
 resource vnetAvd 'Microsoft.Network/virtualNetworks@2023-09-01' existing = {
   name: 'vnet-avd-${prefix}'
 }
@@ -142,7 +142,7 @@ resource aadLogin 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
 
 // ============ End-user RBAC ============
 // Mirrors the primary stack so the same AVD group can use this Shortpath host.
-// Reader on the resource group is already granted by infra/main.bicep (same RG).
+// Reader on the resource group is already granted by infra/avd/main.bicep (same RG).
 resource avdUserAppGroup 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (assignAvdGroup) {
   name: guid(appGroup.id, avdUserGroupObjectId, desktopVirtualizationUserRoleId)
   scope: appGroup

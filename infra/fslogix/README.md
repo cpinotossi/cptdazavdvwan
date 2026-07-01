@@ -2,7 +2,7 @@
 
 Dedizierter Bicep-Stack für einen **Multi-Session-AVD-Host** mit **FSLogix-Profil-Containern** auf **Azure Files**, erreichbar **ausschließlich über einen Private Endpoint**. Authentifizierung erfolgt **cloud-only über Microsoft Entra Kerberos** (kein Active Directory Domain Services).
 
-Dieser Stack ist bewusst vom primären AVD-Stack (`infra/main.bicep`) und vom Shortpath-Stack (`infra/shortpath/`) isoliert und folgt demselben Muster: eigener Host-Pool, eigene App-Group, eigener Workspace, eigener Workflow.
+Dieser Stack ist bewusst vom primären AVD-Stack (`infra/avd/main.bicep`) und vom Shortpath-Stack (`infra/shortpath/`) isoliert und folgt demselben Muster: eigener Host-Pool, eigene App-Group, eigener Workspace, eigener Workflow.
 
 ## Überblick
 
@@ -37,7 +37,7 @@ Deshalb wird die Private DNS Zone `privatelink.file.core.windows.net` **direkt p
 
 ### `snet-pe` im Basis-VNet
 
-Das Private-Endpoint-Subnetz `snet-pe` ist in `infra/main.bicep` definiert (nicht in diesem Stack). Grund: Würde der FSLogix-Stack das Subnetz als eigenständige Ressource zum bestehenden VNet hinzufügen, würde ein erneuter Lauf von `deploy.yml` (das die Subnetz-Liste inline definiert) das Subnetz wieder entfernen. Durch die Definition im Basis-VNet ist `snet-pe` race-frei und übersteht Re-Deploys.
+Das Private-Endpoint-Subnetz `snet-pe` ist in `infra/avd/main.bicep` definiert (nicht in diesem Stack). Grund: Würde der FSLogix-Stack das Subnetz als eigenständige Ressource zum bestehenden VNet hinzufügen, würde ein erneuter Lauf von `deploy.yml` (das die Subnetz-Liste inline definiert) das Subnetz wieder entfernen. Durch die Definition im Basis-VNet ist `snet-pe` race-frei und übersteht Re-Deploys.
 
 ## Was Bicep abdeckt und was der Workflow erledigt
 

@@ -1,16 +1,19 @@
-name: Deploy vWAN AVD UDR Test
+name: Deploy AVD Workload
+
+# AVD WORKLOAD (spoke) layer: AVD spoke VNet + NAT/Bastion, host pool, session
+# host VM and end-user RBAC. The spoke connects to the vWAN hub created by the
+# PLATFORM stack (platform.yml) via an `existing` reference, so platform.yml
+# must have run first. Non-destructive / idempotent on re-run.
 
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
     paths:
-      - 'infra/**'
-      - '!infra/chaos/**'
-      - '!infra/shortpath/**'
-      - '!infra/fslogix/**'
-      - '!infra/identity/members.bicep'
-      - '!infra/identity/members.bicepparam'
+      - 'infra/avd/**'
+      - 'infra/identity/main.bicep'
+      - 'infra/identity/main.bicepparam'
+      - 'infra/identity/shared.bicep'
       - '.github/workflows/deploy.yml'
 
 permissions:
@@ -50,12 +53,13 @@ jobs:
             --query properties.outputs.avdUserGroupObjectId.value -o tsv)
           echo "AVD_USER_GROUP_OBJECT_ID=$AVD_GROUP" >> "$GITHUB_ENV"
 
-      - name: Deploy Bicep
+      - name: Deploy AVD Bicep
         run: |
           az deployment group create \
             --resource-group "rg-${{ env.PREFIX }}" \
-            --template-file infra/main.bicep \
-            --parameters infra/main.bicepparam \
+            --name avd \
+            --template-file infra/avd/main.bicep \
+            --parameters infra/avd/main.bicepparam \
             --verbose
 
       - name: Show deployment operations on failure
@@ -67,12 +71,9 @@ jobs:
             --output table
           echo ""
           echo "=== Failed Operations ==="
-          DEPLOY_NAME=$(az deployment group list \
-            --resource-group "rg-${{ env.PREFIX }}" \
-            --query "[0].name" -o tsv)
           az deployment operation group list \
             --resource-group "rg-${{ env.PREFIX }}" \
-            --name "$DEPLOY_NAME" \
+            --name avd \
             --query "[?properties.provisioningState=='Failed'].{resource:properties.targetResource.resourceName, error:properties.statusMessage.error}" \
             --output json
 
@@ -132,10 +133,10 @@ jobs:
           RG="rg-${{ env.PREFIX }}"
           echo "=== Public IPs ==="
           echo "Firewall PIP (default internet egress):"
-          az deployment group show -g "$RG" -n main --query properties.outputs.firewallPublicIp.value -o tsv
+          az deployment group show -g "$RG" -n platform --query properties.outputs.firewallPublicIp.value -o tsv
           echo ""
           echo "NAT Gateway PIP (expected for WVD/RDP traffic):"
-          az deployment group show -g "$RG" -n main --query properties.outputs.natGatewayPublicIp.value -o tsv
+          az deployment group show -g "$RG" -n avd --query properties.outputs.natGatewayPublicIp.value -o tsv
           echo ""
           echo "=== Test from VM: curl ifconfig.me ==="
           echo "If Routing Intent wins for default traffic, this shows Firewall PIP."

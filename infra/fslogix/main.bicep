@@ -14,7 +14,7 @@
 //    Azure default DNS (168.63.129.16), so the VNet link is what makes
 //    <storage>.file.core.windows.net resolve to the private IP. No custom DNS needed.
 //  - PE lives in snet-pe, a dedicated subnet in the SAME vnet-avd as the session
-//    host (snet-pe is defined in infra/main.bicep so a deploy.yml re-run keeps it).
+//    host (snet-pe is defined in infra/avd/main.bicep so a deploy.yml re-run keeps it).
 //  - Own host pool / app group / workspace for clean isolation from hp-<prefix>.
 //  - Entra Kerberos POST-CONFIG (admin consent + app manifest tag) is NOT done here
 //    because the storage Entra app is auto-created by the Storage RP only AFTER this
@@ -64,7 +64,7 @@ var virtualMachineUserLoginRoleId = 'fb879df8-f326-4884-b1cf-06f3ad86be52'
 var storageFileDataSmbShareContributorRoleId = '0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb'
 var assignAvdGroup = !empty(avdUserGroupObjectId)
 
-// ---- Existing AVD spoke (created by infra/main.bicep) ----
+// ---- Existing AVD spoke (created by infra/avd/main.bicep) ----
 resource vnetAvd 'Microsoft.Network/virtualNetworks@2023-09-01' existing = {
   name: 'vnet-avd-${prefix}'
 
@@ -265,7 +265,7 @@ resource aadLogin 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
 
 // ============ End-user RBAC ============
 // Same AVD group used by the primary stack. Reader on the RG is already granted
-// by infra/main.bicep (same RG).
+// by infra/avd/main.bicep (same RG).
 //  - Desktop Virtualization User on the FSLogix app group -> may use the desktop
 //  - Virtual Machine User Login on the host               -> may sign in (Entra)
 //  - Storage File Data SMB Share Contributor on storage   -> may read/write own FSLogix profile

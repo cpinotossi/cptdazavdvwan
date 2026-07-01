@@ -1,0 +1,68 @@
+name: Deploy Platform (vWAN + Firewall)
+
+# PLATFORM (landing-zone) layer: vWAN hub, Azure Firewall (secured hub) and
+# Routing Intent. Deploy this FIRST; the AVD workload (deploy.yml) connects its
+# spoke to the hub created here. Non-destructive / idempotent on re-run.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra/platform/**'
+      - '.github/workflows/platform.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  LOCATION: swedencentral
+  PREFIX: cptdazavdvwan
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create Resource Group
+        run: az group create --name "rg-${{ env.PREFIX }}" --location "${{ env.LOCATION }}"
+
+      - name: Deploy Platform Bicep
+        run: |
+          az deployment group create \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --name platform \
+            --template-file infra/platform/main.bicep \
+            --parameters infra/platform/main.bicepparam \
+            --verbose
+
+      - name: Show deployment operations on failure
+        if: failure()
+        run: |
+          echo "=== Deployment Operations ==="
+          az deployment group list \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --output table
+          echo ""
+          echo "=== Failed Operations ==="
+          az deployment operation group list \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --name platform \
+            --query "[?properties.provisioningState=='Failed'].{resource:properties.targetResource.resourceName, error:properties.statusMessage.error}" \
+            --output json
+
+      - name: Show platform outputs
+        run: |
+          RG="rg-${{ env.PREFIX }}"
+          echo "=== Platform outputs ==="
+          echo "vWAN hub: $(az deployment group show -g "$RG" -n platform --query properties.outputs.virtualHubName.value -o tsv)"
+          echo "Firewall private IP: $(az deployment group show -g "$RG" -n platform --query properties.outputs.firewallPrivateIp.value -o tsv)"
+          echo "Firewall public IP (default internet egress): $(az deployment group show -g "$RG" -n platform --query properties.outputs.firewallPublicIp.value -o tsv)"
