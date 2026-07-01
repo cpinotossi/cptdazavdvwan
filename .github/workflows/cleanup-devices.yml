@@ -1,0 +1,59 @@
+name: Cleanup Stale Entra Devices
+
+# Standalone stale-device cleanup, DECOUPLED from teardown.yml (which deletes the
+# resource group first and is therefore unusable once a redeploy has recreated the
+# RG). Deleting the RG removes the AVD VMs but NOT their Entra device registrations
+# (OS computer names vmavd01 / vmfsl01 / vmsp01). On the next restore the
+# AADLoginForWindows extension then fails with "hostname is already used by another
+# device in this tenant" (0x801c0083). Run this to delete those stale device objects
+# without touching any Azure resources. Requires the pipeline identity to hold Graph
+# Device.ReadWrite.All (granted via infra/identity/grant-pipeline-permissions.sh).
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_names:
+        description: 'Space-separated OS computer names to remove from Entra'
+        required: false
+        default: 'vmavd01 vmfsl01 vmsp01'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete stale Entra device registrations
+        run: |
+          DEVICE_NAMES="${{ github.event.inputs.device_names }}"
+          for NAME in $DEVICE_NAMES; do
+            echo "=== Checking Entra device '$NAME' ==="
+            IDS=$(az rest --method GET \
+              --url "https://graph.microsoft.com/v1.0/devices?\$filter=displayName eq '$NAME'&\$select=id" \
+              --query "value[].id" -o tsv 2>/dev/null) || {
+                echo "::warning::Could not query devices for '$NAME' (missing Device.ReadWrite.All?). Skipping."
+                continue
+              }
+            if [ -z "$IDS" ]; then
+              echo "No Entra device '$NAME' found. Nothing to delete."
+              continue
+            fi
+            for ID in $IDS; do
+              echo "Deleting Entra device '$NAME' (objectId $ID) ..."
+              if az rest --method DELETE \
+                --url "https://graph.microsoft.com/v1.0/devices/$ID" 2>/dev/null; then
+                echo "  -> deleted"
+              else
+                echo "::warning::Failed to delete device '$NAME' ($ID). Delete it manually before restore."
+              fi
+            done
+          done
+          echo "Stale Entra device cleanup complete."
