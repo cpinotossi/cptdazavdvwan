@@ -21,9 +21,12 @@ permissions:
   contents: read
 
 env:
-  LOCATION: swedencentral
+  LOCATION: ${{ vars.AZURE_LOCATION || 'swedencentral' }}
   PREFIX: cptdazavdvwan
   ADMIN_USERNAME: chpinoto
+  AVD_VM_SIZE: ${{ vars.AVD_VM_SIZE || 'Standard_D2s_v5' }}
+  AVD_COMPUTER_NAME: ${{ vars.AVD_COMPUTER_NAME || 'vmavd01' }}
+  AVD_USER_GROUP_OBJECT_ID: ${{ vars.AVD_USER_GROUP_OBJECT_ID }}
 
 jobs:
   deploy:
@@ -41,6 +44,7 @@ jobs:
         run: az group create --name "rg-${{ env.PREFIX }}" --location "${{ env.LOCATION }}"
 
       - name: Deploy Entra security groups
+        if: env.AVD_USER_GROUP_OBJECT_ID == ''
         run: |
           RG="rg-${{ env.PREFIX }}"
           az deployment group create \
@@ -54,7 +58,10 @@ jobs:
           echo "AVD_USER_GROUP_OBJECT_ID=$AVD_GROUP" >> "$GITHUB_ENV"
 
       - name: Deploy AVD Bicep
+        env:
+          VM_ADMIN_PASSWORD: ${{ secrets.VM_ADMIN_PASSWORD }}
         run: |
+          : "${VM_ADMIN_PASSWORD:?Set the VM_ADMIN_PASSWORD repository secret}"
           az deployment group create \
             --resource-group "rg-${{ env.PREFIX }}" \
             --name avd \
@@ -89,13 +96,22 @@ jobs:
             --name "$HP" \
             --query token -o tsv)
 
-          if [ -z "$TOKEN" ]; then
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
             echo "Token empty, generating new one..."
-            TOKEN=$(az rest --method POST \
-              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RG}/providers/Microsoft.DesktopVirtualization/hostPools/${HP}/registrationTokens?api-version=2023-09-05" \
-              --body '{"expirationTime":"'"$(date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%S.0000000Z)"'"}' \
-              --query token -o tsv)
+            TOKEN=$(az desktopvirtualization hostpool update \
+              --resource-group "$RG" \
+              --name "$HP" \
+              --registration-info \
+                expiration-time="$(date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%SZ)" \
+                registration-token-operation=Update \
+              --query registrationInfo.token -o tsv)
           fi
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "::error::Could not obtain an AVD registration token."
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
 
           echo "=== Installing DSC extension for AVD agent ==="
           az vm extension set \
@@ -109,11 +125,11 @@ jobs:
               \"configurationFunction\": \"Configuration.ps1\\\\AddSessionHost\",
               \"properties\": {
                 \"hostPoolName\": \"${HP}\",
-                \"registrationInfoToken\": \"${TOKEN}\",
                 \"aadJoin\": true
               }
             }" \
-            --verbose
+            --protected-settings "{\"properties\":{\"registrationInfoToken\":\"${TOKEN}\"}}" \
+            --output none
 
       - name: Show effective routes on AVD NIC
         run: |

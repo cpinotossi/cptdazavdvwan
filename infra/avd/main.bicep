@@ -22,6 +22,14 @@ param prefix string = 'cptdazavdvwan'
 @description('Admin username for VMs.')
 param adminUsername string = 'yourUsername'
 
+@description('Session host VM size. Verify regional family quota before deployment.')
+param vmSize string = 'Standard_D2s_v5'
+
+@minLength(1)
+@maxLength(15)
+@description('Windows computer name. Must be unique among Entra devices in the tenant.')
+param computerName string = 'vmavd01'
+
 @secure()
 @description('Admin password for VMs.')
 param adminPassword string
@@ -246,7 +254,7 @@ resource vmAvd 'Microsoft.Compute/virtualMachines@2023-09-01' = {
   name: 'vm-avd-${prefix}'
   location: location
   properties: {
-    hardwareProfile: { vmSize: 'Standard_D2s_v5' }
+    hardwareProfile: { vmSize: vmSize }
     storageProfile: {
       imageReference: {
         publisher: 'microsoftwindowsdesktop'
@@ -257,7 +265,7 @@ resource vmAvd 'Microsoft.Compute/virtualMachines@2023-09-01' = {
       osDisk: { createOption: 'FromImage', managedDisk: { storageAccountType: 'Premium_LRS' } }
     }
     osProfile: {
-      computerName: 'vmavd01'
+      computerName: computerName
       adminUsername: adminUsername
       adminPassword: adminPassword
       windowsConfiguration: { provisionVMAgent: true }
