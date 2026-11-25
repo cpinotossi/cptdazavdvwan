@@ -186,7 +186,7 @@ resource fwRcg 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2023-09-
       {
         ruleCollectionType: 'FirewallPolicyFilterRuleCollection'
         name: 'allow-avd-network'
-        priority: 1100
+        priority: 900
         action: { type: 'Allow' }
         rules: [
           {
