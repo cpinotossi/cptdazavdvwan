@@ -13,9 +13,16 @@ permissions:
   contents: read
 
 env:
-  LOCATION: swedencentral
+  LOCATION: ${{ vars.AZURE_LOCATION || 'swedencentral' }}
   PREFIX: cptdazavdvwan
   ADMIN_USERNAME: chpinoto
+  AVD_VM_SIZE: ${{ vars.AVD_VM_SIZE || 'Standard_D2s_v5' }}
+  SHORTPATH_COMPUTER_NAME: ${{ vars.SHORTPATH_COMPUTER_NAME || 'vmsp01' }}
+  AVD_USER_GROUP_OBJECT_ID: ${{ vars.AVD_USER_GROUP_OBJECT_ID }}
+
+concurrency:
+  group: deploy-shortpath
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -30,16 +37,24 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Resolve AVD user group
+        if: env.AVD_USER_GROUP_OBJECT_ID == ''
         run: |
-          # Reuse the same security group as the primary stack (created by infra/identity).
-          AVD_GROUP=$(az ad group list \
-            --filter "uniqueName eq 'grp-avd-users-${{ env.PREFIX }}'" \
-            --query "[0].id" -o tsv)
+          AVD_GROUP=$(az deployment group show \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --name identity-groups \
+            --query properties.outputs.avdUserGroupObjectId.value -o tsv)
+          if [ -z "$AVD_GROUP" ] || [ "$AVD_GROUP" = "null" ]; then
+            echo "::error::Set AVD_USER_GROUP_OBJECT_ID to the existing AVD security group."
+            exit 1
+          fi
           echo "AVD_USER_GROUP_OBJECT_ID=$AVD_GROUP" >> "$GITHUB_ENV"
           echo "Resolved AVD user group: ${AVD_GROUP:-<not found>}"
 
       - name: Deploy Shortpath Bicep
+        env:
+          VM_ADMIN_PASSWORD: ${{ secrets.VM_ADMIN_PASSWORD }}
         run: |
+          : "${VM_ADMIN_PASSWORD:?Set the VM_ADMIN_PASSWORD repository secret}"
           az deployment group create \
             --resource-group "rg-${{ env.PREFIX }}" \
             --name shortpath \
@@ -69,13 +84,21 @@ jobs:
             --name "$HP" \
             --query token -o tsv)
 
-          if [ -z "$TOKEN" ]; then
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
             echo "Token empty, generating new one..."
-            TOKEN=$(az rest --method POST \
-              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RG}/providers/Microsoft.DesktopVirtualization/hostPools/${HP}/registrationTokens?api-version=2023-09-05" \
-              --body '{"expirationTime":"'"$(date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%S.0000000Z)"'"}' \
-              --query token -o tsv)
+            TOKEN=$(az desktopvirtualization hostpool update \
+              --resource-group "$RG" \
+              --name "$HP" \
+              --registration-info \
+                expiration-time="$(date -u -d '+24 hours' +%Y-%m-%dT%H:%M:%SZ)" \
+                registration-token-operation=Update \
+              --query registrationInfo.token -o tsv)
           fi
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "::error::Could not obtain an AVD registration token."
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
 
           echo "=== Installing DSC extension for AVD agent ==="
           az vm extension set \
@@ -89,11 +112,26 @@ jobs:
               \"configurationFunction\": \"Configuration.ps1\\\\AddSessionHost\",
               \"properties\": {
                 \"hostPoolName\": \"${HP}\",
-                \"registrationInfoToken\": \"${TOKEN}\",
                 \"aadJoin\": true
               }
             }" \
-            --verbose
+            --protected-settings "{\"properties\":{\"registrationInfoToken\":\"${TOKEN}\"}}" \
+            --output none
+
+      - name: Verify session host registration
+        run: |
+          for ATTEMPT in {1..20}; do
+            STATUS=$(az rest --method get \
+              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-${{ env.PREFIX }}/providers/Microsoft.DesktopVirtualization/hostPools/hp-shortpath-${{ env.PREFIX }}/sessionHosts?api-version=2024-04-03" \
+              --query "value[0].properties.status" -o tsv)
+            echo "Session host status: ${STATUS:-not registered yet}"
+            if [ "$STATUS" = "Available" ]; then
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::Shortpath session host did not become Available."
+          exit 1
 
       - name: Verify RDP Shortpath readiness (public networks)
         run: |
@@ -110,15 +148,34 @@ jobs:
             --name "$VM" \
             --command-id RunPowerShellScript \
             --scripts "
+              \$ErrorActionPreference='Stop'
               \$p='HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services'
-              \$v=Get-ItemProperty -Path \$p -Name fClientDisableUDP,SelectTransport,fUseUdpPortRedirector,UdpPortNumber -ErrorAction SilentlyContinue
-              if (\$null -eq \$v -or \$null -eq \$v.fClientDisableUDP) {
-                Write-Output 'UDP transport: DEFAULT (enabled). Public-networks Shortpath (STUN/TURN) can be used.'
-              } elseif (\$v.fClientDisableUDP -eq 1) {
-                Write-Output 'UDP transport: DISABLED by policy (fClientDisableUDP=1). Shortpath will fall back to TCP.'
-              } else {
-                Write-Output 'UDP transport: enabled (fClientDisableUDP=0).'
+              \$v=if (Test-Path \$p) { Get-ItemProperty -Path \$p } else { \$null }
+              if (\$v.SelectTransport -eq 1) {
+                throw 'UDP transport is disabled by the session-host policy SelectTransport=1.'
               }
+              Write-Output 'UDP transport permitted by SelectTransport. This is readiness, not proof of a UDP session.'
               Write-Output ('Managed-networks listener (fUseUdpPortRedirector): ' + \$(if (\$v.fUseUdpPortRedirector) { \$v.fUseUdpPortRedirector } else { 'not set (managed-networks Shortpath off)' }))
+              Write-Output 'SHORTPATH_TRANSPORT_READY'
             " \
-            --output json | jq -r '.value[].message'
+            --output json > "$RUNNER_TEMP/shortpath-readiness.json"
+          jq -r '.value[].message' "$RUNNER_TEMP/shortpath-readiness.json"
+          jq -er '.value[] | select(.code == "ComponentStatus/StdOut/succeeded") | .message | select(contains("SHORTPATH_TRANSPORT_READY"))' \
+            "$RUNNER_TEMP/shortpath-readiness.json" > /dev/null
+
+      - name: Show test routing and client instructions
+        run: |
+          az network nic show-effective-route-table \
+            --resource-group "rg-${{ env.PREFIX }}" \
+            --name "nic-shortpath-${{ env.PREFIX }}" \
+            --output table
+          {
+            echo "## Direct Stream Shortpath test ready"
+            echo "- Connect to ws-shortpath-${{ env.PREFIX }} using native Windows App."
+            echo "- Browser connections do not support Shortpath."
+            echo "- For UDP and TCP Multipath, use Windows App for Windows 2.0.1069.0 or later."
+            echo "- Run analyze-shortpath.ipynb against this subscription."
+            echo "- Verify UDP / UDP (Relay) and Multipath in Connection Information."
+            echo "- Event 135 proves Shortpath only when its message explicitly states transport type set to UDP."
+            echo "- Managed listener UDP 3390 remains disabled."
+          } >> "$GITHUB_STEP_SUMMARY"

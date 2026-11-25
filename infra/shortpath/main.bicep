@@ -4,9 +4,9 @@
 // Design decisions:
 //  - Shortpath type: PUBLIC NETWORKS (STUN/TURN). UDP/TCP are enabled in Windows
 //    by default, so NO in-guest configuration (Group Policy / Intune / Machine
-//    Configuration) is required. The only network dependency is the Azure
-//    Firewall network rule 'rdp-shortpath-relay' (UDP 3478 -> 51.5.0.0/16),
-//    which already covers the whole AVD spoke (10.1.0.0/16) in infra/platform/main.bicep.
+//    Configuration) is required. STUN/TURN endpoints must be reachable over UDP.
+//    The WindowsVirtualDesktop service-tag UDR sends 51.5.0.0/16 via NAT Gateway;
+//    the firewall relay rule applies only if that traffic traverses the firewall.
 //    A managed-networks listener (UDP 3390) would require an in-guest policy;
 //    that path is intentionally NOT used here.
 //  - Own host pool / app group / workspace for clean isolation from hp-<prefix>.
@@ -25,6 +25,14 @@ param prefix string = 'cptdazavdvwan'
 
 @description('Admin username for the session host.')
 param adminUsername string = 'yourUsername'
+
+@description('VM size for the dedicated test host.')
+param vmSize string = 'Standard_D2s_v5'
+
+@minLength(1)
+@maxLength(15)
+@description('Unique Windows computer name, distinct from the primary AVD host.')
+param computerName string = 'vmsp01'
 
 @secure()
 @description('Admin password for the session host.')
@@ -51,6 +59,8 @@ resource hostPool 'Microsoft.DesktopVirtualization/hostPools@2023-09-05' = {
   name: 'hp-shortpath-${prefix}'
   location: avdLocation
   properties: {
+    friendlyName: 'Shortpath Test'
+    description: 'Direct Stream Shortpath and Multipath test pool. Use native Windows App; browser connections use TCP.'
     hostPoolType: 'Pooled'
     loadBalancerType: 'BreadthFirst'
     preferredAppGroupType: 'Desktop'
@@ -100,7 +110,7 @@ resource vmShortpath 'Microsoft.Compute/virtualMachines@2023-09-01' = {
   name: 'vm-shortpath-${prefix}'
   location: location
   properties: {
-    hardwareProfile: { vmSize: 'Standard_D2s_v5' }
+    hardwareProfile: { vmSize: vmSize }
     storageProfile: {
       imageReference: {
         publisher: 'microsoftwindowsdesktop'
@@ -111,7 +121,7 @@ resource vmShortpath 'Microsoft.Compute/virtualMachines@2023-09-01' = {
       osDisk: { createOption: 'FromImage', managedDisk: { storageAccountType: 'Premium_LRS' } }
     }
     osProfile: {
-      computerName: 'vmsp01'
+      computerName: computerName
       adminUsername: adminUsername
       adminPassword: adminPassword
       windowsConfiguration: { provisionVMAgent: true }

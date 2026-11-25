@@ -81,7 +81,35 @@ needs no Microsoft Graph application permissions. Optional identity, membership,
 device-cleanup and FSLogix workflows may require additional permissions and are
 not enabled by this setup.
 
-### Manual
+### Direct Stream Shortpath test host
+
+Run **Deploy RDP Shortpath Session Host** to provision a separate test host,
+host pool, application group and workspace in the existing AVD spoke.
+The workflow reuses `AZURE_LOCATION`, `AVD_VM_SIZE`, `AVD_USER_GROUP_OBJECT_ID`
+and the `VM_ADMIN_PASSWORD` secret. `SHORTPATH_COMPUTER_NAME` optionally
+overrides the separate Windows name `vmsp01`; do not reuse the primary host name.
+This additional VM and its disk incur charges.
+
+Use the native Windows App to connect to `ws-shortpath-cptdazavdvwan`.
+Browser connections do not support Shortpath. For Direct Stream Multipath with
+UDP and redundant TCP paths, use Windows App for Windows 2.0.1069.0 or later.
+Direct Stream is the new name of the existing streaming stack, not a separate
+feature switch.
+
+Run [analyze-shortpath.ipynb](analyze-shortpath.ipynb), initialize its variables
+before connecting, then check `UDP` or `UDP (Relay)` and Multipath in the client
+connection information. The notebook targets the current lab subscription and
+group by default; override them with `AZURE_SUBSCRIPTION_ID` and
+`AVD_USER_GROUP_OBJECT_ID` for another environment. Historical notebook outputs
+are cleared; only a new test establishes the current transport.
+
+Public Shortpath uses the default host-pool UDP options. The fixed managed
+listener on UDP 3390 remains disabled. The `WindowsVirtualDesktop` UDR currently
+sends `51.5.0.0/16` via NAT Gateway, bypassing Azure Firewall; the relay allow rule
+only applies when that traffic traverses the firewall. Other direct UDP paths
+must satisfy their own routing and firewall requirements.
+
+### Manual deployment
 
 ```bash
 export LOCATION=polandcentral
