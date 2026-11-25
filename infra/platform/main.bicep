@@ -167,6 +167,24 @@ resource fwRcg 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2023-09-
       }
       {
         ruleCollectionType: 'FirewallPolicyFilterRuleCollection'
+        name: 'allow-ifconfig-egress'
+        priority: 1020
+        action: { type: 'Allow' }
+        rules: [
+          {
+            ruleType: 'ApplicationRule'
+            name: 'ifconfig-io'
+            sourceAddresses: [ avdSpokeAddr ]
+            protocols: [
+              { protocolType: 'Http', port: 80 }
+              { protocolType: 'Https', port: 443 }
+            ]
+            targetFqdns: [ 'ifconfig.io' ]
+          }
+        ]
+      }
+      {
+        ruleCollectionType: 'FirewallPolicyFilterRuleCollection'
         name: 'allow-avd-network'
         priority: 1100
         action: { type: 'Allow' }

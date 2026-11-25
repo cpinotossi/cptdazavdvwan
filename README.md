@@ -45,6 +45,10 @@ Run **Deploy Platform (vWAN + Firewall)**, wait for success, then run
 **Deploy AVD Workload**. Each workflow also runs when its own files change on
 `main`; when changing both stacks, deploy the platform before the workload.
 
+The platform firewall includes a dedicated Application Rule Collection,
+`allow-ifconfig-egress` (priority 1020), allowing the AVD spoke (`10.1.0.0/16`)
+to reach `ifconfig.io` over HTTP (80) and HTTPS (443) for public egress IP checks.
+
 Required repository secrets:
 
 | Secret | Description |
