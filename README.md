@@ -63,9 +63,9 @@ Repository variables:
 | AVD_COMPUTER_NAME | vmavd01 | Windows name, unique in the tenant, at most 15 characters |
 | AVD_USER_GROUP_OBJECT_ID | Empty | Existing AVD security group; skips Graph group creation when set |
 
-The current target is subscription `4aecf0e8-2fe2-4187-bc93-0356bd2676f5`,
+The current target is subscription `a0844269-41ae-442c-8277-415f1283d422`,
 with networking and the VM in `polandcentral`, VM size `Standard_D2s_v6`,
-and Windows computer name `avd-mhodaa01`. The AVD control plane remains in
+and Windows computer name `avd-sub2-01`. The AVD control plane remains in
 `northeurope`. Existing members of the configured AVD group receive access.
 
 The managed identity `id-github-cptdazavdvwan` resides in
@@ -83,9 +83,9 @@ not enabled by this setup.
 export LOCATION=polandcentral
 export PREFIX=cptdazavdvwan
 export ADMIN_USERNAME=chpinoto
-export AZURE_SUBSCRIPTION_ID=4aecf0e8-2fe2-4187-bc93-0356bd2676f5
+export AZURE_SUBSCRIPTION_ID=a0844269-41ae-442c-8277-415f1283d422
 export AVD_VM_SIZE=Standard_D2s_v6
-export AVD_COMPUTER_NAME=avd-mhodaa01
+export AVD_COMPUTER_NAME=avd-sub2-01
 export AVD_USER_GROUP_OBJECT_ID=23b3a9fd-22f3-461c-9dc8-7f3183e87d02
 read -rsp 'VM administrator password: ' VM_ADMIN_PASSWORD
 echo
@@ -123,6 +123,6 @@ az group delete -n rg-cptdazavdvwan --yes --no-wait
 
 The separate identity group and tenant-wide Entra groups remain intact.
 Before redeploying a deleted VM, remove only its stale Entra device registration
-(`avd-mhodaa01` for this target), or choose a new `AVD_COMPUTER_NAME`. The legacy
+(`avd-sub2-01` for this target), or choose a new `AVD_COMPUTER_NAME`. The legacy
 teardown/device-cleanup workflows use hardcoded device names and must not be used
 to clean up a different environment.
